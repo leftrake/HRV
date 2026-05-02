@@ -14,6 +14,7 @@
       <button class="tab-btn active" data-tab="log">Log Today</button>
       <button class="tab-btn" data-tab="history">History</button>
       <button class="tab-btn" data-tab="trends">Trends</button>
+      <button class="tab-btn" data-tab="connect">Connect</button>
     </nav>
   </header>
 
@@ -59,7 +60,12 @@
         </div>
 
         <div class="form-group">
-          <label>Activities</label>
+          <div class="label-row">
+            <label>Activities</label>
+            <button type="button" id="import-strava-btn" class="pill-btn" title="Import today's Strava activities">
+              Import from Strava
+            </button>
+          </div>
           <div class="activity-tags" id="activity-tags">
             <label class="tag"><input type="checkbox" value="Running" /> Running</label>
             <label class="tag"><input type="checkbox" value="Cycling" /> Cycling</label>
@@ -71,6 +77,7 @@
             <label class="tag"><input type="checkbox" value="Rest day" /> Rest day</label>
           </div>
           <input type="text" id="custom-activity" placeholder="Other activity…" />
+          <div id="strava-import-msg" class="import-msg hidden"></div>
         </div>
 
         <div class="form-group">
@@ -111,6 +118,83 @@
         <canvas id="hrv-chart"></canvas>
       </div>
       <div class="stats-grid" id="stats-grid"></div>
+    </section>
+
+    <!-- CONNECT TAB -->
+    <section id="tab-connect" class="tab">
+
+      <!-- Strava -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#fc4c02">S</div>
+          <div class="provider-info">
+            <h2>Strava</h2>
+            <p class="provider-desc">Auto-fill your activities from today's Strava workouts</p>
+          </div>
+          <span id="strava-status-dot" class="status-dot disconnected" title="Not connected"></span>
+        </div>
+
+        <div id="strava-setup-form">
+          <ol class="setup-steps">
+            <li>Go to <strong>strava.com/settings/api</strong> and create a free API app</li>
+            <li>Set <em>Authorization Callback Domain</em> to: <code id="strava-domain-display">—</code></li>
+            <li>Paste your Client ID and Secret below</li>
+          </ol>
+          <div class="form-group">
+            <label>Client ID</label>
+            <input type="number" id="strava-client-id" placeholder="12345" />
+          </div>
+          <div class="form-group">
+            <label>Client Secret</label>
+            <input type="password" id="strava-client-secret" placeholder="••••••••••••••••••••••••" />
+          </div>
+          <button type="button" id="strava-connect-btn">Connect to Strava</button>
+          <p class="footnote">Your credentials are stored only in your browser's local storage and never sent anywhere except Strava.</p>
+        </div>
+
+        <div id="strava-connected-view" class="hidden">
+          <p class="connected-msg">Connected as <strong id="strava-athlete-name"></strong></p>
+          <p class="footnote">Use the "Import from Strava" button on the Log tab to pull today's activities.</p>
+          <button type="button" id="strava-disconnect-btn" class="secondary small">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- Garmin -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#007cc3">G</div>
+          <div class="provider-info">
+            <h2>Garmin</h2>
+            <p class="provider-desc">Import HRV and activities from Garmin Connect CSV exports</p>
+          </div>
+        </div>
+
+        <div class="import-grid">
+          <div class="import-option">
+            <h3>Activities</h3>
+            <p class="help-text">Garmin Connect → Activities → (gear icon) → Export to CSV</p>
+            <input type="file" id="garmin-act-file" accept=".csv" class="hidden" />
+            <button type="button" id="garmin-act-btn" class="secondary">Choose File</button>
+          </div>
+          <div class="import-option">
+            <h3>Health &amp; HRV</h3>
+            <p class="help-text">Garmin Connect full data export — or any CSV with <em>Date</em> and <em>HRV</em> columns</p>
+            <input type="file" id="garmin-hrv-file" accept=".csv" class="hidden" />
+            <button type="button" id="garmin-hrv-btn" class="secondary">Choose File</button>
+          </div>
+        </div>
+
+        <div id="garmin-preview" class="hidden">
+          <h3 class="preview-title">Select entries to import</h3>
+          <div id="garmin-preview-list"></div>
+          <div class="form-actions" style="margin-top:12px">
+            <button type="button" id="garmin-import-confirm">Import Selected</button>
+            <button type="button" id="garmin-import-cancel" class="secondary">Cancel</button>
+          </div>
+        </div>
+        <div id="garmin-import-msg" class="import-msg hidden"></div>
+      </div>
+
     </section>
   </main>
 
