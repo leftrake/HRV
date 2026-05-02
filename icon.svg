@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e2235"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="40" y1="0" x2="472" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#5b8dee" stop-opacity="0"/>
+      <stop offset="28%"  stop-color="#5b8dee"/>
+      <stop offset="62%"  stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="hc">
+      <path d="M256,195 C240,163 198,118 158,127 C106,138 76,180 76,220 C76,298 178,362 256,408 C334,362 436,298 436,220 C436,180 406,138 354,127 C314,118 272,163 256,195Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Rounded-square background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+
+  <!-- Heart fill -->
+  <path d="M256,195 C240,163 198,118 158,127 C106,138 76,180 76,220 C76,298 178,362 256,408 C334,362 436,298 436,220 C436,180 406,138 354,127 C314,118 272,163 256,195Z"
+        fill="#1c2040" stroke="#323760" stroke-width="3"/>
+
+  <!-- Faint ECG line outside the heart -->
+  <polyline
+    points="40,258 128,258 153,240 174,258 200,258 214,218 228,96 244,332 260,258 282,258 300,234 320,258 472,258"
+    fill="none" stroke="#5b8dee" stroke-width="10" stroke-opacity="0.15"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Bright ECG line clipped inside the heart -->
+  <polyline
+    clip-path="url(#hc)"
+    points="40,258 128,258 153,240 174,258 200,258 214,218 228,96 244,332 260,258 282,258 300,234 320,258 472,258"
+    fill="none" stroke="url(#pulse)" stroke-width="22"
+    stroke-linecap="round" stroke-linejoin="round"
+    filter="url(#glow)"/>
+</svg>
