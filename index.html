@@ -45,6 +45,8 @@
           <div class="hrv-indicator" id="hrv-indicator"></div>
         </div>
 
+        <div id="training-context" class="training-context hidden"></div>
+
         <div class="form-group">
           <label>Device readings <span class="unit">(optional)</span></label>
           <div class="metrics-grid">
@@ -173,6 +175,13 @@
         <canvas id="hrv-chart"></canvas>
       </div>
       <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="section-label">Training Load</div>
+      <div class="chart-wrap" id="load-chart-wrap">
+        <canvas id="load-chart"></canvas>
+        <p id="load-chart-empty" class="chart-empty hidden">Connect Strava to see training load.</p>
+      </div>
+      <div class="insights-grid" id="insights-grid"></div>
     </section>
 
     <!-- CONNECT TAB -->
@@ -209,8 +218,13 @@
 
         <div id="strava-connected-view" class="hidden">
           <p class="connected-msg">Connected as <strong id="strava-athlete-name"></strong></p>
-          <p class="footnote">Use the "Import from Strava" button on the Log tab to pull today's activities.</p>
-          <button type="button" id="strava-disconnect-btn" class="secondary small">Disconnect</button>
+          <div class="sync-row">
+            <span id="sync-status-text" class="footnote">Never synced</span>
+            <button type="button" id="manual-sync-btn" class="secondary small">Sync Now</button>
+          </div>
+          <div id="sync-progress" class="import-msg hidden"></div>
+          <p class="footnote">Activities sync automatically every 6 hours. Use "Import from Strava" on the Log tab to pull data for a specific date.</p>
+          <button type="button" id="strava-disconnect-btn" class="secondary small" style="margin-top:8px">Disconnect</button>
         </div>
       </div>
 
@@ -252,6 +266,30 @@
 
     </section>
   </main>
+
+  <!-- Race confirmation modal -->
+  <div id="race-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-title">🏁 Race Detected</div>
+      <p id="race-modal-desc" class="modal-desc"></p>
+      <div class="form-group">
+        <label>Place / Result <span class="unit">(optional)</span></label>
+        <input type="text" id="race-place" placeholder="e.g. 3rd, 14:32.5" />
+      </div>
+      <div class="form-group">
+        <label>Splits <span class="unit">(optional)</span></label>
+        <input type="text" id="race-splits" placeholder="e.g. 68s, 70s, 69s, 67s" />
+      </div>
+      <div class="form-group">
+        <label>Notes <span class="unit">(optional)</span></label>
+        <textarea id="race-notes" rows="2" placeholder="Conditions, how you felt…"></textarea>
+      </div>
+      <div class="form-actions">
+        <button id="race-confirm-btn">Save Race</button>
+        <button id="race-skip-btn" class="secondary">Not a Race</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

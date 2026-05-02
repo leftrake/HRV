@@ -50,6 +50,219 @@ function fmtDur(seconds) {
 function optInt(id)   { const v = parseInt(document.getElementById(id).value, 10);   return isNaN(v) ? null : v; }
 function optFloat(id) { const v = parseFloat(document.getElementById(id).value);       return isNaN(v) ? null : v; }
 
+// ── Activities storage ────────────────────────────────────────────────────────
+
+const ACTIVITIES_KEY = 'strava_activities';
+function loadActivities() {
+  try { return JSON.parse(localStorage.getItem(ACTIVITIES_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveActivities(acts) { localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(acts)); }
+
+// ── Strava sync ───────────────────────────────────────────────────────────────
+
+const StravaSync = {
+  RACE_RE: /\b(race|800m|1500m|1600m|mile|5k|10k|half.?marathon|\bhm\b|marathon|meet|invitational|championship|qualifier|\btri\b|triathlon|\bxc\b|cross.?country)\b/i,
+
+  processActivity(raw) {
+    const type   = Strava.mapType(raw.sport_type || raw.type);
+    const effort = raw.suffer_score ?? raw.relative_effort ?? this.estimateEffort(raw);
+    const isRace = ['Race','VirtualRace'].includes(raw.sport_type) || this.RACE_RE.test(raw.name || '');
+    return {
+      id:           raw.id,
+      date:         (raw.start_date_local || raw.start_date || '').slice(0, 10),
+      startTime:    raw.start_date_local,
+      stravaType:   raw.sport_type || raw.type,
+      mappedType:   type,
+      name:         raw.name,
+      distanceM:    raw.distance || 0,
+      durationS:    raw.moving_time || 0,
+      avgHR:        raw.average_heartrate ? Math.round(raw.average_heartrate) : null,
+      maxHR:        raw.max_heartrate     ? Math.round(raw.max_heartrate)     : null,
+      avgPaceSecKm: raw.average_speed > 0 ? Math.round(1000 / raw.average_speed) : null,
+      elevationM:   Math.round(raw.total_elevation_gain || 0),
+      effort:       Math.round(effort || 0),
+      isRace,
+      raceConfirmed: false,
+      raceDetails:  null,
+    };
+  },
+
+  estimateEffort(raw) {
+    if (!raw.moving_time) return 0;
+    const hrs = raw.moving_time / 3600;
+    const hrF = raw.average_heartrate ? Math.max(0, (raw.average_heartrate - 60) / 110) : 0.45;
+    const typeM = ['Run','VirtualRun','TrailRun'].includes(raw.sport_type) ? 1.2
+                : ['WeightTraining','Workout','Crossfit'].includes(raw.sport_type) ? 0.85 : 1.0;
+    return Math.round(hrs * hrF * 100 * typeM);
+  },
+
+  async _fetch(after, before, page = 1) {
+    const t = Strava.token;
+    if (!t) throw new Error('Not connected');
+    const url = new URL('https://www.strava.com/api/v3/athlete/activities');
+    url.searchParams.set('after', after);
+    url.searchParams.set('before', before);
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('page', page);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${t.access_token}` } });
+    if (res.status === 429) throw new Error('Rate limited — try again in a few minutes');
+    if (!res.ok) throw new Error(`Strava API ${res.status}`);
+    return res.json();
+  },
+
+  async backfill(days = 90, onProgress) {
+    await Strava.refreshIfNeeded();
+    const end    = Math.floor(Date.now() / 1000);
+    const start  = end - days * 86400;
+    const existing = new Set(loadActivities().map(a => a.id));
+    const fetched = [];
+    let page = 1;
+    while (true) {
+      onProgress?.(`Fetching page ${page}…`);
+      const batch = await this._fetch(start, end, page);
+      if (!batch.length) break;
+      for (const raw of batch) {
+        if (!existing.has(raw.id)) fetched.push(this.processActivity(raw));
+      }
+      if (batch.length < 100) break;
+      page++;
+    }
+    if (fetched.length) {
+      const all = [...loadActivities(), ...fetched].sort((a, b) => b.date.localeCompare(a.date));
+      saveActivities(all);
+      this._queueRaces(fetched.filter(a => a.isRace));
+    }
+    localStorage.setItem('strava_last_sync', String(Date.now()));
+    return fetched.length;
+  },
+
+  async syncRecent(onProgress) {
+    await Strava.refreshIfNeeded();
+    const lastSync = parseInt(localStorage.getItem('strava_last_sync') || '0', 10);
+    const after  = lastSync ? Math.floor(lastSync / 1000) - 3600 : Math.floor(Date.now() / 1000) - 86400;
+    const before = Math.floor(Date.now() / 1000);
+    onProgress?.('Checking for new activities…');
+    const batch    = await this._fetch(after, before).catch(() => []);
+    const existing = new Set(loadActivities().map(a => a.id));
+    const newActs  = batch.map(r => this.processActivity(r)).filter(a => !existing.has(a.id));
+    if (newActs.length) {
+      const all = [...loadActivities(), ...newActs].sort((a, b) => b.date.localeCompare(a.date));
+      saveActivities(all);
+      this._queueRaces(newActs.filter(a => a.isRace));
+    }
+    localStorage.setItem('strava_last_sync', String(Date.now()));
+    return newActs.length;
+  },
+
+  async autoSync() {
+    if (!Strava.isConnected()) return;
+    const lastSync   = parseInt(localStorage.getItem('strava_last_sync') || '0', 10);
+    const hoursSince = (Date.now() - lastSync) / 3_600_000;
+    if (hoursSince < 6) return;
+    try { await this.syncRecent(); } catch {}
+  },
+
+  _queueRaces(races) {
+    const q = JSON.parse(localStorage.getItem('race_queue') || '[]');
+    races.forEach(r => { if (!q.includes(r.id)) q.push(r.id); });
+    localStorage.setItem('race_queue', JSON.stringify(q));
+  },
+
+  processRaceQueue() {
+    const q = JSON.parse(localStorage.getItem('race_queue') || '[]');
+    if (!q.length) return;
+    const act = loadActivities().find(a => a.id === q[0]);
+    if (act) showRaceModal(act);
+    else {
+      localStorage.setItem('race_queue', JSON.stringify(q.slice(1)));
+      this.processRaceQueue();
+    }
+  },
+};
+
+// ── Training load ─────────────────────────────────────────────────────────────
+
+const TrainingLoad = {
+  K_ATL: 1 - Math.exp(-1 / 7),
+  K_CTL: 1 - Math.exp(-1 / 42),
+
+  dayEffort(activities, date) {
+    return activities.filter(a => a.date === date).reduce((s, a) => s + (a.effort || 0), 0);
+  },
+
+  compute(activities, startDate, endDate) {
+    const days = [];
+    const d = new Date(startDate + 'T12:00:00');
+    const end = new Date(endDate + 'T12:00:00');
+    while (d <= end) { days.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
+    let atl = 0, ctl = 0;
+    const series = {};
+    for (const date of days) {
+      const effort = this.dayEffort(activities, date);
+      const tsb    = ctl - atl;
+      atl = atl + this.K_ATL * (effort - atl);
+      ctl = ctl + this.K_CTL * (effort - ctl);
+      series[date] = { effort, atl: +atl.toFixed(1), ctl: +ctl.toFixed(1), tsb: +tsb.toFixed(1) };
+    }
+    return series;
+  },
+
+  latest(activities) {
+    const end   = todayStr();
+    const start = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    return this.compute(activities, start, end)[end] || { atl: 0, ctl: 0, tsb: 0, effort: 0 };
+  },
+};
+
+// ── Recovery analytics ────────────────────────────────────────────────────────
+
+const RecoveryAnalytics = {
+  EFFORT_THRESHOLD: 40,
+
+  baselineHRV(entries) {
+    const vals = entries.slice(0, 28).map(e => e.hrv).filter(v => v > 0);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  },
+
+  // Returns { activityType: { '1': avgPctChange, '2': ..., '3': ... } }
+  correlations(activities, entries) {
+    const baseline = this.baselineHRV(entries);
+    if (!baseline || entries.length < 10) return {};
+    const byDate = Object.fromEntries(entries.map(e => [e.date, e]));
+    const data = {};
+    for (const act of activities) {
+      if ((act.effort || 0) < this.EFFORT_THRESHOLD) continue;
+      for (let lag = 1; lag <= 3; lag++) {
+        const d = new Date(act.date + 'T12:00:00');
+        d.setDate(d.getDate() + lag);
+        const entry = byDate[d.toISOString().slice(0, 10)];
+        if (!entry?.hrv) continue;
+        const pct = ((entry.hrv - baseline) / baseline) * 100;
+        ((data[act.mappedType] ??= {})[lag] ??= []).push(pct);
+      }
+    }
+    const out = {};
+    for (const [type, lags] of Object.entries(data)) {
+      for (const [lag, vals] of Object.entries(lags)) {
+        if (vals.length < 3) continue;
+        (out[type] ??= {})[lag] = +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(1);
+      }
+    }
+    return out;
+  },
+
+  isPostWorkoutSuppression(entry, activities, entries) {
+    const baseline = this.baselineHRV(entries);
+    if (!baseline || !entry.hrv) return false;
+    if ((entry.hrv - baseline) / baseline > -0.08) return false;
+    const prev = new Date(entry.date + 'T12:00:00');
+    prev.setDate(prev.getDate() - 1);
+    const prevStr = prev.toISOString().slice(0, 10);
+    return activities.some(a => a.date === prevStr && (a.effort || 0) >= this.EFFORT_THRESHOLD);
+  },
+};
+
 function todayStr()     { return new Date().toISOString().slice(0, 10); }
 function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
 
@@ -98,7 +311,7 @@ const Strava = {
     url.searchParams.set('redirect_uri', this.redirectUri());
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('approval_prompt', 'auto');
-    url.searchParams.set('scope', 'activity:read_all');
+    url.searchParams.set('scope', 'activity:read_all,profile:read_all');
     window.location.href = url.toString();
   },
 
@@ -290,10 +503,18 @@ const Garmin = {
         ? `${data.athlete.firstname} ${data.athlete.lastname}`.trim()
         : 'Athlete';
       localStorage.setItem('strava_athlete', name);
-      // Switch to connect tab to show success
-      setTimeout(() => {
+      setTimeout(async () => {
         document.querySelector('[data-tab="connect"]')?.click();
         updateStravaUI();
+        // Backfill 90 days on first connect
+        try {
+          const n = await StravaSync.backfill(90, t => updateSyncProgress(t));
+          updateSyncProgress(`Synced ${n} activities from the last 90 days.`, true);
+          updateStravaUI();
+          StravaSync.processRaceQueue();
+        } catch (err) {
+          updateSyncProgress(`Backfill failed: ${err.message}`, true);
+        }
       }, 100);
     } catch (err) {
       alert(`Strava connection failed: ${err.message}`);
@@ -677,6 +898,7 @@ function entryCardHTML(en) {
         <span class="entry-date">${date}</span>
         <span><span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>
       </div>
+      ${raceBadgeHTML(en)}
       <div class="entry-metrics">
         <div class="metric">Energy <span>${en.energy}/10</span></div>
         <div class="metric">Stress <span>${en.stress}/10</span></div>
@@ -685,8 +907,23 @@ function entryCardHTML(en) {
       </div>
       ${deviceMetricsHTML(en)}
       ${activityHTML}
+      ${suppressionFlagHTML(en)}
       ${notes}
     </div>`;
+}
+
+function suppressionFlagHTML(en) {
+  const activities = loadActivities();
+  const entries    = loadEntries();
+  if (!RecoveryAnalytics.isPostWorkoutSuppression(en, activities, entries)) return '';
+  return '<span class="suppression-flag">Post-workout suppression</span>';
+}
+
+function raceBadgeHTML(en) {
+  const activities = loadActivities();
+  const acts = activities.filter(a => a.date === en.date && a.isRace && a.raceConfirmed);
+  if (!acts.length) return '';
+  return acts.map(a => `<span class="race-badge">🏁 ${a.name}${a.raceDetails?.place ? ' · ' + a.raceDetails.place : ''}</span>`).join(' ');
 }
 
 function deviceMetricsHTML(en) {
@@ -720,6 +957,8 @@ function renderTrends() {
   }
   renderStats(entries);
   renderChart(entries);
+  renderLoadChart(days);
+  renderInsights();
 }
 
 function renderStats(entries) {
@@ -842,6 +1081,7 @@ function updateStravaUI() {
   }
 
   updateStravaImportBtn();
+  updateSyncStatus();
 }
 
 document.getElementById('strava-connect-btn').addEventListener('click', () => {
@@ -995,6 +1235,326 @@ function showGarminMsg(text, type) {
   garminImportMsg._t = setTimeout(() => { garminImportMsg.className = 'import-msg hidden'; }, 5000);
 }
 
+// ── Training load chart ───────────────────────────────────────────────────────
+
+let loadChart = null;
+
+const TYPE_COLOR = {
+  'Running':          'rgba(248,113,113,.75)',
+  'Cycling':          'rgba(251,191,36,.75)',
+  'Strength training':'rgba(91,141,238,.75)',
+  'Swimming':         'rgba(52,211,153,.75)',
+  'Walking':          'rgba(148,163,184,.5)',
+  'Yoga':             'rgba(167,139,250,.75)',
+  'Meditation':       'rgba(167,139,250,.5)',
+};
+const DEFAULT_COLOR = 'rgba(100,116,139,.6)';
+
+function renderLoadChart(rangeDays = 30) {
+  const activities = loadActivities();
+  const empty = document.getElementById('load-chart-empty');
+  const wrap  = document.getElementById('load-chart-wrap');
+
+  if (!activities.length) {
+    if (loadChart) { loadChart.destroy(); loadChart = null; }
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  const end   = todayStr();
+  const days  = rangeDays > 0 ? rangeDays : 90;
+  const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const series = TrainingLoad.compute(activities, start, end);
+
+  const labels = Object.keys(series);
+  const efforts = labels.map(d => series[d].effort);
+  const atls    = labels.map(d => series[d].atl);
+  const ctls    = labels.map(d => series[d].ctl);
+  const tsbs    = labels.map(d => series[d].tsb);
+
+  // Bar colors: dominant activity type per day
+  const barColors = labels.map(date => {
+    const acts = activities.filter(a => a.date === date);
+    if (!acts.length) return 'rgba(46,51,72,.4)';
+    const dominant = acts.reduce((a, b) => (a.effort || 0) >= (b.effort || 0) ? a : b);
+    return TYPE_COLOR[dominant.mappedType] || DEFAULT_COLOR;
+  });
+
+  // Thin x-axis labels for larger ranges
+  const skipN = labels.length > 60 ? 7 : labels.length > 30 ? 3 : 1;
+  const tickLabels = labels.map((d, i) =>
+    i % skipN === 0
+      ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : ''
+  );
+
+  const ctx = document.getElementById('load-chart').getContext('2d');
+  if (loadChart) { loadChart.destroy(); loadChart = null; }
+
+  loadChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: tickLabels,
+      datasets: [
+        {
+          label: 'Daily Effort',
+          data: efforts,
+          backgroundColor: barColors,
+          borderRadius: 3,
+          order: 3,
+          yAxisID: 'y',
+        },
+        {
+          label: 'ATL – Fatigue',
+          data: atls,
+          type: 'line',
+          borderColor: '#f87171',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false,
+          order: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'CTL – Fitness',
+          data: ctls,
+          type: 'line',
+          borderColor: '#5b8dee',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false,
+          order: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'TSB – Form',
+          data: tsbs,
+          type: 'line',
+          borderColor: '#34d399',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          tension: 0.4,
+          fill: { target: 'origin', above: 'rgba(52,211,153,.08)', below: 'rgba(248,113,113,.08)' },
+          order: 2,
+          yAxisID: 'y2',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8891a8', font: { size: 11 }, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3348',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#8891a8',
+          callbacks: {
+            title: (items) => labels[items[0].dataIndex],
+            afterBody: (items) => {
+              const date = labels[items[0].dataIndex];
+              const acts = activities.filter(a => a.date === date);
+              return acts.map(a => `  ${actIcon(a.mappedType)} ${a.name} (${a.effort} pts)`);
+            },
+          },
+        },
+      },
+      scales: {
+        x:  { ticks: { color: '#8891a8', maxRotation: 0 }, grid: { color: '#1e2235' } },
+        y:  { ticks: { color: '#8891a8' }, grid: { color: '#2e3348' }, title: { display: true, text: 'Load', color: '#8891a8' } },
+        y2: { position: 'right', ticks: { color: '#34d399' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Form (TSB)', color: '#34d399' } },
+      },
+    },
+  });
+}
+
+// ── Insights panel ────────────────────────────────────────────────────────────
+
+function renderInsights() {
+  const grid       = document.getElementById('insights-grid');
+  const activities = loadActivities();
+  const entries    = loadEntries();
+  grid.innerHTML   = '';
+
+  if (!activities.length) return;
+
+  // Card 1: Current training status
+  const load = TrainingLoad.latest(activities);
+  const tsbLabel = load.tsb > 10 ? 'Fresh' : load.tsb > -10 ? 'Neutral' : 'Fatigued';
+  const tsbCls   = load.tsb > 10 ? 'pos'   : load.tsb > -10 ? ''        : 'neg';
+  grid.insertAdjacentHTML('beforeend', `
+    <div class="insight-card">
+      <h4>Current Status</h4>
+      <div class="insight-row"><span class="insight-type">Fitness (CTL)</span><span class="insight-val">${load.ctl}</span></div>
+      <div class="insight-row"><span class="insight-type">Fatigue (ATL)</span><span class="insight-val">${load.atl}</span></div>
+      <div class="insight-row"><span class="insight-type">Form (TSB)</span><span class="insight-val ${tsbCls}">${load.tsb > 0 ? '+' : ''}${load.tsb} — ${tsbLabel}</span></div>
+    </div>`);
+
+  // Card 2: HRV correlations per activity type
+  const corr = RecoveryAnalytics.correlations(activities, entries);
+  const types = Object.keys(corr);
+  if (types.length) {
+    const rows = types.map(t => {
+      const d1 = corr[t][1];
+      const d2 = corr[t][2];
+      const pct = d1 ?? d2;
+      if (pct == null) return '';
+      const cls = pct < 0 ? 'neg' : 'pos';
+      const lag = d1 != null ? 'next day' : '2 days';
+      return `<div class="insight-row"><span class="insight-type">${actIcon(t)} ${t}</span><span class="insight-val ${cls}">${pct > 0 ? '+' : ''}${pct}% HRV (${lag})</span></div>`;
+    }).filter(Boolean);
+    if (rows.length) {
+      grid.insertAdjacentHTML('beforeend', `<div class="insight-card"><h4>HRV After Training</h4>${rows.join('')}</div>`);
+    }
+  }
+
+  // Card 3: Days of suppression per type
+  const suppTypes = Object.keys(corr).filter(t => corr[t][1] < -5 || corr[t][2] < -5);
+  if (suppTypes.length) {
+    const rows = suppTypes.map(t => {
+      const days = [1,2,3].filter(d => corr[t][d] != null && corr[t][d] < -5);
+      return `<div class="insight-row"><span class="insight-type">${actIcon(t)} ${t}</span><span class="insight-val neg">~${days.length} day${days.length > 1 ? 's' : ''} recovery</span></div>`;
+    });
+    grid.insertAdjacentHTML('beforeend', `<div class="insight-card"><h4>Recovery Time</h4>${rows.join('')}</div>`);
+  }
+
+  // Card 4: Recent hard sessions
+  const hard = activities
+    .filter(a => (a.effort || 0) >= RecoveryAnalytics.EFFORT_THRESHOLD)
+    .slice(0, 4);
+  if (hard.length) {
+    const rows = hard.map(a => {
+      const dateStr = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `<div class="insight-row"><span class="insight-type">${actIcon(a.mappedType)} ${dateStr}</span><span class="insight-val">${a.effort} pts</span></div>`;
+    });
+    grid.insertAdjacentHTML('beforeend', `<div class="insight-card"><h4>Hard Sessions</h4>${rows.join('')}</div>`);
+  }
+}
+
+// ── Training context (log tab) ────────────────────────────────────────────────
+
+function updateTrainingContext() {
+  const el = document.getElementById('training-context');
+  const activities = loadActivities();
+  if (!activities.length) { el.classList.add('hidden'); return; }
+
+  const load = TrainingLoad.latest(activities);
+  const tsbLabel = load.tsb > 10 ? 'Fresh — good day to train hard' :
+                   load.tsb > -5 ? 'Neutral — moderate effort OK' :
+                   load.tsb > -20 ? 'Fatigued — consider easy day' : 'Very fatigued — prioritise recovery';
+  const tsbCls   = load.tsb > 10 ? 'tc-fresh' : load.tsb > -5 ? 'tc-neutral' : 'tc-fatigued';
+
+  el.className = 'training-context';
+  el.innerHTML = `
+    <div class="tc-stat"><div class="tc-value" style="color:var(--accent)">${load.ctl}</div><div class="tc-label">Fitness</div></div>
+    <div class="tc-stat"><div class="tc-value" style="color:var(--red)">${load.atl}</div><div class="tc-label">Fatigue</div></div>
+    <div class="tc-stat"><div class="tc-value ${tsbCls}">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="tc-label">Form</div></div>
+    <div class="tc-note">${tsbLabel}</div>`;
+}
+
+// ── Race modal ────────────────────────────────────────────────────────────────
+
+let _currentRaceId = null;
+
+function showRaceModal(activity) {
+  _currentRaceId = activity.id;
+  const dateStr = new Date(activity.date + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+  document.getElementById('race-modal-desc').textContent =
+    `"${activity.name}" on ${dateStr} looks like a race (${fmtDist(activity.distanceM)}${activity.avgHR ? `, ♥ ${activity.avgHR} bpm avg` : ''}). Confirm details below.`;
+  document.getElementById('race-place').value  = '';
+  document.getElementById('race-splits').value = '';
+  document.getElementById('race-notes').value  = '';
+  document.getElementById('race-modal').classList.remove('hidden');
+}
+
+function closeRaceModal(confirmed, details = null) {
+  document.getElementById('race-modal').classList.add('hidden');
+  if (_currentRaceId != null) {
+    const activities = loadActivities();
+    const act = activities.find(a => a.id === _currentRaceId);
+    if (act) {
+      act.raceConfirmed = confirmed;
+      act.isRace = confirmed;
+      if (details) act.raceDetails = details;
+      saveActivities(activities);
+    }
+    const q = JSON.parse(localStorage.getItem('race_queue') || '[]')
+      .filter(id => id !== _currentRaceId);
+    localStorage.setItem('race_queue', JSON.stringify(q));
+    _currentRaceId = null;
+    // Show next in queue
+    setTimeout(() => StravaSync.processRaceQueue(), 300);
+  }
+}
+
+document.getElementById('race-confirm-btn').addEventListener('click', () => {
+  closeRaceModal(true, {
+    place:  document.getElementById('race-place').value.trim(),
+    splits: document.getElementById('race-splits').value.trim(),
+    notes:  document.getElementById('race-notes').value.trim(),
+  });
+});
+document.getElementById('race-skip-btn').addEventListener('click', () => closeRaceModal(false));
+document.getElementById('race-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeRaceModal(false);
+});
+
+// ── Sync status ───────────────────────────────────────────────────────────────
+
+function updateSyncStatus() {
+  const el = document.getElementById('sync-status-text');
+  if (!el) return;
+  const lastSync = parseInt(localStorage.getItem('strava_last_sync') || '0', 10);
+  if (!lastSync) { el.textContent = 'Never synced'; return; }
+  const mins = Math.round((Date.now() - lastSync) / 60000);
+  el.textContent = mins < 2 ? 'Synced just now' :
+                   mins < 60 ? `Synced ${mins}m ago` :
+                   `Synced ${Math.round(mins/60)}h ago`;
+  const count = loadActivities().length;
+  if (count) el.textContent += ` · ${count} activities`;
+}
+
+function updateSyncProgress(text, done = false) {
+  const el = document.getElementById('sync-progress');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `import-msg ${done ? 'success' : 'info'}`;
+  if (done) setTimeout(() => { el.className = 'import-msg hidden'; }, 5000);
+}
+
+document.getElementById('manual-sync-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('manual-sync-btn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  try {
+    const n = await StravaSync.syncRecent(t => updateSyncProgress(t));
+    updateSyncProgress(`Done — ${n} new activit${n === 1 ? 'y' : 'ies'} added.`, true);
+    updateSyncStatus();
+    StravaSync.processRaceQueue();
+    updateTrainingContext();
+  } catch (err) {
+    updateSyncProgress(`Sync failed: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sync Now';
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 updateStravaUI();
+updateSyncStatus();
+updateTrainingContext();
+StravaSync.autoSync().then(() => {
+  updateSyncStatus();
+  updateTrainingContext();
+  StravaSync.processRaceQueue();
+});
