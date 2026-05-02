@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HRV Wellness Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>HRV Wellness Tracker</h1>
+    <nav>
+      <button class="tab-btn active" data-tab="log">Log Today</button>
+      <button class="tab-btn" data-tab="history">History</button>
+      <button class="tab-btn" data-tab="trends">Trends</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- LOG TAB -->
+    <section id="tab-log" class="tab active">
+      <form id="entry-form">
+        <div class="form-group">
+          <label for="entry-date">Date</label>
+          <input type="date" id="entry-date" required />
+        </div>
+
+        <div class="form-group">
+          <label for="hrv">HRV <span class="unit">(ms)</span></label>
+          <input type="number" id="hrv" min="1" max="300" placeholder="e.g. 65" required />
+          <div class="hrv-indicator" id="hrv-indicator"></div>
+        </div>
+
+        <div class="form-group">
+          <label>How did you feel?</label>
+          <div class="mood-grid">
+            <div class="mood-row">
+              <span class="mood-label">Energy</span>
+              <input type="range" id="energy" min="1" max="10" value="5" />
+              <span class="mood-value" id="energy-val">5</span>
+            </div>
+            <div class="mood-row">
+              <span class="mood-label">Stress</span>
+              <input type="range" id="stress" min="1" max="10" value="5" />
+              <span class="mood-value" id="stress-val">5</span>
+            </div>
+            <div class="mood-row">
+              <span class="mood-label">Sleep quality</span>
+              <input type="range" id="sleep" min="1" max="10" value="5" />
+              <span class="mood-value" id="sleep-val">5</span>
+            </div>
+            <div class="mood-row">
+              <span class="mood-label">Mood</span>
+              <input type="range" id="mood" min="1" max="10" value="5" />
+              <span class="mood-value" id="mood-val">5</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Activities</label>
+          <div class="activity-tags" id="activity-tags">
+            <label class="tag"><input type="checkbox" value="Running" /> Running</label>
+            <label class="tag"><input type="checkbox" value="Cycling" /> Cycling</label>
+            <label class="tag"><input type="checkbox" value="Strength training" /> Strength</label>
+            <label class="tag"><input type="checkbox" value="Yoga" /> Yoga</label>
+            <label class="tag"><input type="checkbox" value="Meditation" /> Meditation</label>
+            <label class="tag"><input type="checkbox" value="Walking" /> Walking</label>
+            <label class="tag"><input type="checkbox" value="Swimming" /> Swimming</label>
+            <label class="tag"><input type="checkbox" value="Rest day" /> Rest day</label>
+          </div>
+          <input type="text" id="custom-activity" placeholder="Other activity…" />
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes <span class="unit">(optional)</span></label>
+          <textarea id="notes" rows="3" placeholder="Anything else worth noting — nutrition, travel, illness, etc."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" id="save-btn">Save Entry</button>
+          <button type="button" id="clear-btn" class="secondary">Clear</button>
+        </div>
+      </form>
+      <div id="form-message" class="message hidden"></div>
+    </section>
+
+    <!-- HISTORY TAB -->
+    <section id="tab-history" class="tab">
+      <div class="history-controls">
+        <input type="text" id="history-search" placeholder="Search notes or activities…" />
+        <button id="export-btn" class="secondary small">Export JSON</button>
+      </div>
+      <div id="history-list"></div>
+    </section>
+
+    <!-- TRENDS TAB -->
+    <section id="tab-trends" class="tab">
+      <div class="chart-controls">
+        <label for="range-select">Show last</label>
+        <select id="range-select">
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="0">All time</option>
+        </select>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="hrv-chart"></canvas>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
