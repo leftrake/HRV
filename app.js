@@ -22,6 +22,34 @@ function hrvClass(hrv) {
   return           { label: 'Low',   cls: 'badge-low',   color: '#f87171' };
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const ACTIVITY_ICONS = {
+  'Running': '🏃', 'Cycling': '🚴', 'Strength training': '🏋️',
+  'Yoga': '🧘', 'Meditation': '🌿', 'Walking': '🚶',
+  'Swimming': '🏊', 'Rest day': '😴',
+};
+
+function actIcon(type) { return ACTIVITY_ICONS[type] || '🏃'; }
+
+function fmtDist(meters) {
+  if (!meters) return '';
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function fmtDur(seconds) {
+  if (!seconds) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    : `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function todayStr()     { return new Date().toISOString().slice(0, 10); }
+function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
+
 // ── Strava ───────────────────────────────────────────────────────────────────
 
 const Strava = {
@@ -117,15 +145,14 @@ const Strava = {
     } catch { return false; }
   },
 
-  async fetchTodayActivities() {
+  async fetchActivitiesForDate(dateStr) {
     await this.refreshIfNeeded();
     const t = this.token;
     if (!t) throw new Error('Not connected');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const after = Math.floor(today.getTime() / 1000);
+    const after  = Math.floor(new Date(dateStr + 'T00:00:00').getTime() / 1000);
+    const before = Math.floor(new Date(dateStr + 'T23:59:59').getTime() / 1000);
     const res = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=20`,
+      `https://www.strava.com/api/v3/athlete/activities?after=${after}&before=${before}&per_page=20`,
       { headers: { Authorization: `Bearer ${t.access_token}` } }
     );
     if (!res.ok) throw new Error('Failed to fetch activities');
@@ -293,7 +320,48 @@ const hrvInput  = document.getElementById('hrv');
 const msgEl     = document.getElementById('form-message');
 const indicator = document.getElementById('hrv-indicator');
 
-dateInput.value = new Date().toISOString().slice(0, 10);
+// Date quick buttons
+dateInput.value = todayStr();
+updateDateDisplay();
+updateDateQuickBtns();
+
+document.querySelectorAll('.date-quick-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const d = new Date();
+    d.setDate(d.getDate() + +btn.dataset.offset);
+    dateInput.value = d.toISOString().slice(0, 10);
+    updateDateDisplay();
+    updateDateQuickBtns();
+    clearStravaCards();
+  });
+});
+
+dateInput.addEventListener('change', () => {
+  updateDateDisplay();
+  updateDateQuickBtns();
+  clearStravaCards();
+});
+
+function updateDateDisplay() {
+  const val = dateInput.value;
+  const el  = document.getElementById('date-display');
+  if (!val) { el.innerHTML = ''; return; }
+  const formatted = new Date(val + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
+  const rel = val === todayStr() ? 'Today' : val === yesterdayStr() ? 'Yesterday' : '';
+  el.innerHTML = rel
+    ? `${formatted} <span class="date-relative">— ${rel}</span>`
+    : formatted;
+}
+
+function updateDateQuickBtns() {
+  const val = dateInput.value;
+  document.querySelectorAll('.date-quick-btn').forEach(btn => {
+    const target = +btn.dataset.offset === 0 ? todayStr() : yesterdayStr();
+    btn.classList.toggle('active', val === target);
+  });
+}
 
 ['energy', 'stress', 'sleep', 'mood'].forEach(id => {
   const slider  = document.getElementById(id);
@@ -329,6 +397,17 @@ form.addEventListener('submit', e => {
     mood:       +document.getElementById('mood').value,
     activities,
     notes:      document.getElementById('notes').value.trim(),
+    ...(pendingStravaActivities.length && {
+      stravaActivities: pendingStravaActivities.map(a => ({
+        name:      a.name,
+        type:      Strava.mapType(a.sport_type || a.type),
+        distanceM: a.distance          || 0,
+        durationS: a.moving_time       || 0,
+        avgHR:     a.average_heartrate ? Math.round(a.average_heartrate) : null,
+        maxHR:     a.max_heartrate     ? Math.round(a.max_heartrate)     : null,
+        elevationM:a.total_elevation_gain || 0,
+      })),
+    }),
   };
 
   const entries = loadEntries();
@@ -344,12 +423,15 @@ document.getElementById('clear-btn').addEventListener('click', resetForm);
 
 function resetForm() {
   form.reset();
-  dateInput.value = new Date().toISOString().slice(0, 10);
+  dateInput.value = todayStr();
+  updateDateDisplay();
+  updateDateQuickBtns();
   ['energy', 'stress', 'sleep', 'mood'].forEach(id => {
     document.getElementById(id).value = 5;
     document.getElementById(`${id}-val`).textContent = '5';
   });
   indicator.style.background = 'var(--border)';
+  clearStravaCards();
 }
 
 function showMsg(text, type) {
@@ -363,15 +445,14 @@ function showMsg(text, type) {
 
 const stravaImportBtn = document.getElementById('import-strava-btn');
 const stravaImportMsg = document.getElementById('strava-import-msg');
+let pendingStravaActivities = [];
 
 function updateStravaImportBtn() {
-  if (Strava.isConnected()) {
-    stravaImportBtn.classList.add('strava-connected');
-    stravaImportBtn.title = 'Import today\'s Strava activities';
-  } else {
-    stravaImportBtn.classList.remove('strava-connected');
-    stravaImportBtn.title = 'Connect Strava first (Connect tab)';
-  }
+  const connected = Strava.isConnected();
+  stravaImportBtn.classList.toggle('strava-connected', connected);
+  stravaImportBtn.title = connected
+    ? 'Import Strava activities for the selected date'
+    : 'Connect Strava first (Connect tab)';
 }
 updateStravaImportBtn();
 
@@ -380,28 +461,31 @@ stravaImportBtn.addEventListener('click', async () => {
     showImportMsg(stravaImportMsg, 'Connect Strava first — go to the Connect tab.', 'error');
     return;
   }
+  const dateStr = dateInput.value || todayStr();
   stravaImportBtn.disabled = true;
   stravaImportBtn.textContent = 'Loading…';
   try {
-    const activities = await Strava.fetchTodayActivities();
+    const activities = await Strava.fetchActivitiesForDate(dateStr);
     if (!activities.length) {
-      showImportMsg(stravaImportMsg, 'No Strava activities found for today.', 'info');
+      showImportMsg(stravaImportMsg, 'No Strava activities found for this date.', 'info');
       return;
     }
+    pendingStravaActivities = activities;
+
     // Check matching checkboxes
+    const knownTypes = new Set(['Running','Cycling','Strength training','Yoga','Meditation','Walking','Swimming','Rest day']);
     const mapped = activities.map(a => Strava.mapType(a.sport_type || a.type));
-    const checkboxes = document.querySelectorAll('#activity-tags input[type="checkbox"]');
-    let matched = 0;
-    checkboxes.forEach(cb => {
-      if (mapped.includes(cb.value)) { cb.checked = true; matched++; }
+    document.querySelectorAll('#activity-tags input[type="checkbox"]').forEach(cb => {
+      if (mapped.includes(cb.value)) cb.checked = true;
     });
-    // Remaining non-standard activities go into custom field
-    const custom = mapped.filter(m => !['Running','Cycling','Strength training','Yoga','Meditation','Walking','Swimming','Rest day'].includes(m));
+    const custom = mapped.filter(m => !knownTypes.has(m));
     if (custom.length) {
       const cf = document.getElementById('custom-activity');
       cf.value = [...new Set([...cf.value.split(',').map(s=>s.trim()).filter(Boolean), ...custom])].join(', ');
     }
-    showImportMsg(stravaImportMsg, `Imported ${activities.length} activit${activities.length === 1 ? 'y' : 'ies'} from Strava.`, 'success');
+
+    renderStravaCards(activities);
+    showImportMsg(stravaImportMsg, `${activities.length} activit${activities.length === 1 ? 'y' : 'ies'} imported from Strava.`, 'success');
   } catch (err) {
     showImportMsg(stravaImportMsg, `Strava error: ${err.message}`, 'error');
   } finally {
@@ -409,6 +493,35 @@ stravaImportBtn.addEventListener('click', async () => {
     stravaImportBtn.textContent = 'Import from Strava';
   }
 });
+
+function renderStravaCards(activities) {
+  const container = document.getElementById('strava-activity-cards');
+  container.innerHTML = `<div class="strava-act-cards">${activities.map(a => {
+    const type = Strava.mapType(a.sport_type || a.type);
+    const meta = [
+      fmtDist(a.distance),
+      fmtDur(a.moving_time),
+      a.average_heartrate ? `♥ ${Math.round(a.average_heartrate)} bpm` : '',
+      a.total_elevation_gain ? `↑ ${Math.round(a.total_elevation_gain)} m` : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="strava-act-card">
+      <span class="act-emoji">${actIcon(type)}</span>
+      <div class="act-info">
+        <div class="act-name">${a.name}</div>
+        ${meta ? `<div class="act-meta">${meta}</div>` : ''}
+      </div>
+      <span class="act-source-badge">Strava</span>
+    </div>`;
+  }).join('')}</div>`;
+  container.classList.remove('hidden');
+}
+
+function clearStravaCards() {
+  pendingStravaActivities = [];
+  const c = document.getElementById('strava-activity-cards');
+  c.innerHTML = '';
+  c.classList.add('hidden');
+}
 
 function showImportMsg(el, text, type) {
   el.textContent = text;
@@ -455,12 +568,30 @@ function renderHistory() {
 }
 
 function entryCardHTML(en) {
-  const cls   = hrvClass(en.hrv);
-  const pills = (en.activities || []).map(a => `<span class="activity-pill">${a}</span>`).join('');
-  const notes = en.notes ? `<div class="entry-notes">"${en.notes}"</div>` : '';
-  const date  = new Date(en.date + 'T12:00:00').toLocaleDateString('en-US', {
+  const cls  = hrvClass(en.hrv);
+  const date = new Date(en.date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   });
+  const notes = en.notes ? `<div class="entry-notes">"${en.notes}"</div>` : '';
+
+  // Prefer rich Strava rows; fall back to simple pills
+  let activityHTML = '';
+  if (en.stravaActivities?.length) {
+    const rows = en.stravaActivities.map(a => {
+      const meta = [
+        fmtDist(a.distanceM),
+        fmtDur(a.durationS),
+        a.avgHR ? `♥ ${a.avgHR} bpm` : '',
+        a.elevationM ? `↑ ${a.elevationM} m` : '',
+      ].filter(Boolean).join(' · ');
+      return `<div class="history-strava-act">${actIcon(a.type)} <strong>${a.name}</strong>${meta ? ` <span class="act-stat">· ${meta}</span>` : ''}</div>`;
+    }).join('');
+    activityHTML = `<div class="history-strava-acts">${rows}</div>`;
+  } else if (en.activities?.length) {
+    const pills = en.activities.map(a => `<span class="activity-pill">${actIcon(a)} ${a}</span>`).join('');
+    activityHTML = `<div class="entry-activities">${pills}</div>`;
+  }
+
   return `
     <div class="entry-card">
       <button class="delete-btn" data-id="${en.id}" title="Delete">✕</button>
@@ -474,7 +605,7 @@ function entryCardHTML(en) {
         <div class="metric">Sleep <span>${en.sleep}/10</span></div>
         <div class="metric">Mood <span>${en.mood}/10</span></div>
       </div>
-      ${pills ? `<div class="entry-activities">${pills}</div>` : ''}
+      ${activityHTML}
       ${notes}
     </div>`;
 }

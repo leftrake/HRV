@@ -30,8 +30,13 @@
     <section id="tab-log" class="tab active">
       <form id="entry-form">
         <div class="form-group">
-          <label for="entry-date">Date</label>
-          <input type="date" id="entry-date" required />
+          <label>Date</label>
+          <div class="date-bar">
+            <button type="button" class="date-quick-btn" data-offset="-1">Yesterday</button>
+            <button type="button" class="date-quick-btn" data-offset="0">Today</button>
+            <input type="date" id="entry-date" required />
+          </div>
+          <div class="date-display" id="date-display"></div>
         </div>
 
         <div class="form-group">
@@ -73,15 +78,16 @@
               Import from Strava
             </button>
           </div>
+          <div id="strava-activity-cards" class="hidden"></div>
           <div class="activity-tags" id="activity-tags">
-            <label class="tag"><input type="checkbox" value="Running" /> Running</label>
-            <label class="tag"><input type="checkbox" value="Cycling" /> Cycling</label>
-            <label class="tag"><input type="checkbox" value="Strength training" /> Strength</label>
-            <label class="tag"><input type="checkbox" value="Yoga" /> Yoga</label>
-            <label class="tag"><input type="checkbox" value="Meditation" /> Meditation</label>
-            <label class="tag"><input type="checkbox" value="Walking" /> Walking</label>
-            <label class="tag"><input type="checkbox" value="Swimming" /> Swimming</label>
-            <label class="tag"><input type="checkbox" value="Rest day" /> Rest day</label>
+            <label class="tag"><input type="checkbox" value="Running" />🏃 Running</label>
+            <label class="tag"><input type="checkbox" value="Cycling" />🚴 Cycling</label>
+            <label class="tag"><input type="checkbox" value="Strength training" />🏋️ Strength</label>
+            <label class="tag"><input type="checkbox" value="Yoga" />🧘 Yoga</label>
+            <label class="tag"><input type="checkbox" value="Meditation" />🌿 Meditation</label>
+            <label class="tag"><input type="checkbox" value="Walking" />🚶 Walking</label>
+            <label class="tag"><input type="checkbox" value="Swimming" />🏊 Swimming</label>
+            <label class="tag"><input type="checkbox" value="Rest day" />😴 Rest day</label>
           </div>
           <input type="text" id="custom-activity" placeholder="Other activity…" />
           <div id="strava-import-msg" class="import-msg hidden"></div>

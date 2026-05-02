@@ -154,6 +154,75 @@ input[type="range"]::-moz-range-thumb {
   width: 18px;
 }
 
+/* ── Date bar ── */
+.date-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-quick-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  padding: 9px 14px;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.date-quick-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
+.date-quick-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.date-bar input[type="date"] { flex: 1; }
+
+.date-display {
+  color: var(--text-muted);
+  font-size: .9rem;
+  font-weight: 500;
+  min-height: 1.4em;
+  padding: 0 2px;
+}
+.date-relative { color: var(--accent); font-weight: 600; }
+
+/* ── Strava activity cards ── */
+.strava-act-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+
+.strava-act-card {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid rgba(252,76,2,.3);
+  border-radius: 10px;
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+}
+.act-emoji { font-size: 1.5rem; flex-shrink: 0; line-height: 1; }
+.act-info  { flex: 1; min-width: 0; }
+.act-name  { font-size: .9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act-meta  { color: var(--text-muted); font-size: .8rem; margin-top: 2px; }
+.act-source-badge {
+  background: #fc4c02;
+  border-radius: 4px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .5px;
+  padding: 2px 6px;
+  text-transform: uppercase;
+}
+
+/* History Strava detail rows */
+.history-strava-acts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.history-strava-act  { font-size: .8rem; color: var(--text-muted); }
+.history-strava-act strong { color: var(--text); }
+.history-strava-act .act-stat { color: var(--accent); }
+
 /* ── Activity tags ── */
 .activity-tags { display: flex; flex-wrap: wrap; gap: 8px; }
 
