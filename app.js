@@ -417,6 +417,7 @@ form.addEventListener('submit', e => {
   entries.sort((a, b) => b.date.localeCompare(a.date));
   saveEntries(entries);
   resetForm();
+  delete form.dataset.editingId;
 });
 
 document.getElementById('clear-btn').addEventListener('click', resetForm);
@@ -432,6 +433,8 @@ function resetForm() {
   });
   indicator.style.background = 'var(--border)';
   clearStravaCards();
+  document.getElementById('save-btn').textContent = 'Save Entry';
+  delete form.dataset.editingId;
 }
 
 function showMsg(text, type) {
@@ -530,6 +533,52 @@ function showImportMsg(el, text, type) {
   el._t = setTimeout(() => { el.className = 'import-msg hidden'; }, 4000);
 }
 
+function loadEntryIntoForm(entry) {
+  // Switch to log tab
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-tab="log"]').classList.add('active');
+  document.getElementById('tab-log').classList.add('active');
+
+  // Fill fields
+  dateInput.value = entry.date;
+  updateDateDisplay();
+  updateDateQuickBtns();
+  hrvInput.value = entry.hrv || '';
+  updateHrvIndicator();
+
+  ['energy', 'stress', 'sleep', 'mood'].forEach(id => {
+    document.getElementById(id).value = entry[id] ?? 5;
+    document.getElementById(`${id}-val`).textContent = entry[id] ?? 5;
+  });
+
+  // Activities — check matching boxes, put rest in custom field
+  const known = new Set(['Running','Cycling','Strength training','Yoga','Meditation','Walking','Swimming','Rest day']);
+  document.querySelectorAll('#activity-tags input[type="checkbox"]').forEach(cb => {
+    cb.checked = (entry.activities || []).includes(cb.value);
+  });
+  const custom = (entry.activities || []).filter(a => !known.has(a));
+  document.getElementById('custom-activity').value = custom.join(', ');
+
+  // Restore Strava cards if saved
+  clearStravaCards();
+  if (entry.stravaActivities?.length) {
+    pendingStravaActivities = entry.stravaActivities.map(a => ({
+      name: a.name, sport_type: a.type,
+      distance: a.distanceM, moving_time: a.durationS,
+      average_heartrate: a.avgHR, total_elevation_gain: a.elevationM,
+    }));
+    renderStravaCards(pendingStravaActivities);
+  }
+
+  document.getElementById('notes').value = entry.notes || '';
+
+  // Scroll form into view and flag as editing
+  document.getElementById('save-btn').textContent = 'Update Entry';
+  form.dataset.editingId = entry.id;
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // ── History ───────────────────────────────────────────────────────────────────
 
 const historyList   = document.getElementById('history-list');
@@ -565,6 +614,12 @@ function renderHistory() {
       renderHistory();
     });
   });
+  historyList.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entry = loadEntries().find(en => en.id === +btn.dataset.id);
+      if (entry) loadEntryIntoForm(entry);
+    });
+  });
 }
 
 function entryCardHTML(en) {
@@ -594,7 +649,10 @@ function entryCardHTML(en) {
 
   return `
     <div class="entry-card">
-      <button class="delete-btn" data-id="${en.id}" title="Delete">✕</button>
+      <div class="card-actions">
+        <button class="edit-btn" data-id="${en.id}" title="Edit">Edit</button>
+        <button class="delete-btn" data-id="${en.id}" title="Delete">✕</button>
+      </div>
       <div class="entry-header">
         <span class="entry-date">${date}</span>
         <span><span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>

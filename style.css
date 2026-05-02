@@ -363,6 +363,29 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
 
 .entry-notes { font-size: .875rem; color: var(--text-muted); font-style: italic; }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+.edit-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 10px;
+}
+.edit-btn:hover { border-color: var(--accent); color: var(--accent); background: none; }
+
 .delete-btn {
   background: none;
   border: none;
@@ -371,10 +394,7 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
-  padding: 4px;
-  position: absolute;
-  right: 12px;
-  top: 12px;
+  padding: 4px 6px;
 }
 .delete-btn:hover { background: rgba(248,113,113,.15); color: var(--red); }
 
