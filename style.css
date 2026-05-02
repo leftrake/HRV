@@ -154,6 +154,52 @@ input[type="range"]::-moz-range-thumb {
   width: 18px;
 }
 
+/* ── Device metrics grid ── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.metric-card {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 8px 10px;
+  transition: border-color .15s;
+}
+.metric-card:focus-within { border-color: var(--accent); }
+
+.metric-card-icon { font-size: 1.1rem; line-height: 1; }
+
+.metric-card input {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  padding: 4px 2px;
+  text-align: center;
+  width: 100%;
+}
+.metric-card input:focus { border-bottom-color: var(--accent); outline: none; }
+.metric-card input::placeholder { color: var(--border); font-weight: 400; }
+
+.metric-card-unit  { color: var(--text-muted); font-size: .72rem; }
+.metric-card-label { color: var(--text-muted); font-size: .68rem; letter-spacing: .5px; text-transform: uppercase; }
+
+/* Device metrics in history cards */
+.entry-device-metrics { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.entry-device-metrics .metric { font-size: .8125rem; color: var(--text-muted); }
+.entry-device-metrics .metric span { color: var(--green); font-weight: 600; }
+
 /* ── Date bar ── */
 .date-bar {
   display: flex;

@@ -47,6 +47,9 @@ function fmtDur(seconds) {
     : `${m}:${String(s).padStart(2,'0')}`;
 }
 
+function optInt(id)   { const v = parseInt(document.getElementById(id).value, 10);   return isNaN(v) ? null : v; }
+function optFloat(id) { const v = parseFloat(document.getElementById(id).value);       return isNaN(v) ? null : v; }
+
 function todayStr()     { return new Date().toISOString().slice(0, 10); }
 function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
 
@@ -396,7 +399,13 @@ form.addEventListener('submit', e => {
     sleep:      +document.getElementById('sleep').value,
     mood:       +document.getElementById('mood').value,
     activities,
-    notes:      document.getElementById('notes').value.trim(),
+    notes:        document.getElementById('notes').value.trim(),
+    restingHR:    optInt('resting-hr'),
+    readiness:    optInt('readiness'),
+    sleepDuration:optFloat('sleep-duration'),
+    respRate:     optFloat('resp-rate'),
+    spo2:         optFloat('spo2'),
+    bodyBattery:  optInt('body-battery'),
     ...(pendingStravaActivities.length && {
       stravaActivities: pendingStravaActivities.map(a => ({
         name:      a.name,
@@ -432,6 +441,9 @@ function resetForm() {
     document.getElementById(`${id}-val`).textContent = '5';
   });
   indicator.style.background = 'var(--border)';
+  ['resting-hr','readiness','sleep-duration','resp-rate','spo2','body-battery'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
   clearStravaCards();
   document.getElementById('save-btn').textContent = 'Save Entry';
   delete form.dataset.editingId;
@@ -571,6 +583,14 @@ function loadEntryIntoForm(entry) {
     renderStravaCards(pendingStravaActivities);
   }
 
+  // Device readings
+  const deviceFields = { 'resting-hr': 'restingHR', 'readiness': 'readiness',
+    'sleep-duration': 'sleepDuration', 'resp-rate': 'respRate',
+    'spo2': 'spo2', 'body-battery': 'bodyBattery' };
+  Object.entries(deviceFields).forEach(([id, key]) => {
+    document.getElementById(id).value = entry[key] ?? '';
+  });
+
   document.getElementById('notes').value = entry.notes || '';
 
   // Scroll form into view and flag as editing
@@ -663,9 +683,23 @@ function entryCardHTML(en) {
         <div class="metric">Sleep <span>${en.sleep}/10</span></div>
         <div class="metric">Mood <span>${en.mood}/10</span></div>
       </div>
+      ${deviceMetricsHTML(en)}
       ${activityHTML}
       ${notes}
     </div>`;
+}
+
+function deviceMetricsHTML(en) {
+  const items = [
+    en.restingHR    != null ? `Resting HR <span>${en.restingHR} bpm</span>` : '',
+    en.readiness    != null ? `Readiness <span>${en.readiness}/100</span>` : '',
+    en.sleepDuration!= null ? `Sleep <span>${en.sleepDuration}h</span>` : '',
+    en.respRate     != null ? `Resp. <span>${en.respRate}/min</span>` : '',
+    en.spo2         != null ? `SpO2 <span>${en.spo2}%</span>` : '',
+    en.bodyBattery  != null ? `Battery <span>${en.bodyBattery}/100</span>` : '',
+  ].filter(Boolean);
+  if (!items.length) return '';
+  return `<div class="entry-device-metrics">${items.map(i => `<div class="metric">${i}</div>`).join('')}</div>`;
 }
 
 // ── Trends ────────────────────────────────────────────────────────────────────
@@ -741,6 +775,18 @@ function renderChart(entries) {
           fill: false,
           yAxisID: 'y2',
         },
+        ...(entries.some(e => e.restingHR != null) ? [{
+          label: 'Resting HR',
+          data: entries.map(e => e.restingHR ?? null),
+          borderColor: '#f87171',
+          borderWidth: 1.5,
+          borderDash: [2, 3],
+          pointRadius: 3,
+          tension: 0.35,
+          fill: false,
+          spanGaps: true,
+          yAxisID: 'y3',
+        }] : []),
       ],
     },
     options: {
@@ -767,6 +813,7 @@ function renderChart(entries) {
         x:  { ticks: { color: '#8891a8' }, grid: { color: '#2e3348' } },
         y:  { ticks: { color: '#8891a8' }, grid: { color: '#2e3348' }, title: { display: true, text: 'HRV (ms)', color: '#8891a8' } },
         y2: { position: 'right', min: 1, max: 10, ticks: { color: '#8891a8' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Mood (1–10)', color: '#8891a8' } },
+        y3: { position: 'right', display: entries.some(e => e.restingHR != null), ticks: { color: '#f87171' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Resting HR', color: '#f87171' } },
       },
     },
   });
