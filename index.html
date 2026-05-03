@@ -21,6 +21,7 @@
       <button class="tab-btn active" data-tab="log">Log Today</button>
       <button class="tab-btn" data-tab="history">History</button>
       <button class="tab-btn" data-tab="trends">Trends</button>
+      <button class="tab-btn" data-tab="insights">Insights</button>
       <button class="tab-btn" data-tab="connect">Connect</button>
     </nav>
   </header>
@@ -43,6 +44,7 @@
           <label for="hrv">HRV <span class="unit">(ms)</span></label>
           <input type="number" id="hrv" min="1" max="300" placeholder="e.g. 65" required />
           <div class="hrv-indicator" id="hrv-indicator"></div>
+          <div id="readiness-result" class="hidden"></div>
         </div>
 
         <div id="training-context" class="training-context hidden"></div>
@@ -152,6 +154,7 @@
 
     <!-- HISTORY TAB -->
     <section id="tab-history" class="tab">
+      <div id="suppression-banner" class="suppression-banner hidden"></div>
       <div class="history-controls">
         <input type="text" id="history-search" placeholder="Search notes or activities…" />
         <button id="export-btn" class="secondary small">Export JSON</button>
@@ -182,6 +185,22 @@
         <p id="load-chart-empty" class="chart-empty hidden">Connect Strava to see training load.</p>
       </div>
       <div class="insights-grid" id="insights-grid"></div>
+    </section>
+
+    <!-- INSIGHTS TAB -->
+    <section id="tab-insights" class="tab">
+      <div id="insight-cards-list"></div>
+      <div class="section-label">Weekly Digest</div>
+      <div id="digest-list"></div>
+      <div class="section-label">Suppression Log</div>
+      <div id="alert-log-list"></div>
+      <div class="section-label">Recovery by Activity</div>
+      <div class="chart-wrap"><canvas id="recovery-curve-chart"></canvas></div>
+      <div class="section-label">Race Readiness Correlation</div>
+      <div id="race-correlation-wrap">
+        <div class="chart-wrap"><canvas id="race-correlation-chart"></canvas></div>
+        <div id="pre-race-strips"></div>
+      </div>
     </section>
 
     <!-- CONNECT TAB -->
@@ -224,6 +243,7 @@
           </div>
           <div id="sync-progress" class="import-msg hidden"></div>
           <p class="footnote">Activities sync automatically every 6 hours. Use "Import from Strava" on the Log tab to pull data for a specific date.</p>
+          <button type="button" id="notif-permission-btn" class="secondary small" style="margin-top:8px">Enable Notifications</button>
           <button type="button" id="strava-disconnect-btn" class="secondary small" style="margin-top:8px">Disconnect</button>
         </div>
       </div>

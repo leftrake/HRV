@@ -714,3 +714,184 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
   .import-grid { grid-template-columns: 1fr; }
   .entry-metrics { gap: 10px; }
 }
+
+/* ── Readiness score card ── */
+.rs-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+
+.rs-score {
+  font-size: 2.5rem;
+  font-weight: 700;
+  border-radius: 10px;
+  min-width: 64px;
+  text-align: center;
+  line-height: 1;
+}
+
+.rs-green  { color: var(--green); }
+.rs-yellow { color: var(--yellow); }
+.rs-red    { color: var(--red); }
+
+.rs-info { display: flex; flex-direction: column; gap: 4px; }
+
+.rs-label {
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rs-breakdown {
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+
+/* Readiness badge on history cards */
+.rs-badge {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin-right: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+
+/* ── Suppression alert banner ── */
+.suppression-banner {
+  background: rgba(248,113,113,.1);
+  border: 1px solid rgba(248,113,113,.35);
+  border-radius: var(--radius);
+  color: var(--red);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: .875rem;
+}
+
+.suppression-banner .banner-text { flex: 1; }
+.suppression-banner .banner-dismiss {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 4px;
+  opacity: .7;
+  flex-shrink: 0;
+}
+.suppression-banner .banner-dismiss:hover { opacity: 1; }
+
+/* ── Insights tab ── */
+#insight-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ai-insight-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: .9rem;
+}
+
+.ai-insight-card .ins-icon { font-size: 1.2rem; flex-shrink: 0; line-height: 1.4; }
+.ai-insight-card .ins-text { color: var(--text); line-height: 1.5; }
+
+/* ── Weekly digest card ── */
+.digest-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.digest-card .digest-week {
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.digest-card .digest-summary {
+  font-size: .875rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.digest-card .digest-stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.digest-card .dstat {
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+
+.digest-card .dstat strong { color: var(--text); }
+
+/* ── Alert log items ── */
+.alert-log-item {
+  background: var(--surface2);
+  border-left: 3px solid var(--red);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: .8rem;
+  color: var(--text-muted);
+}
+
+.alert-log-item .al-date { font-weight: 600; color: var(--text); margin-right: 8px; }
+.alert-log-item .al-ack  { opacity: .5; font-style: italic; }
+
+/* ── Recovery curve chart container ── */
+#recovery-curve-chart { max-height: 220px; }
+
+/* ── Race correlation wrap ── */
+#race-correlation-chart { max-height: 240px; }
+
+#pre-race-strips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pre-race-strip {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: .82rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.pre-race-strip .prs-name { font-weight: 600; flex: 1; }
+.pre-race-strip .prs-hrv  { color: var(--accent); font-weight: 700; }
+.pre-race-strip .prs-rs   { color: var(--text-muted); }

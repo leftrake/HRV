@@ -479,6 +479,248 @@ const Garmin = {
   },
 };
 
+// ── AdaptiveBaseline ──────────────────────────────────────────────────────────
+
+const AdaptiveBaseline = {
+  // Computes 60-day rolling baseline (HRV from entries *before* asOfDate)
+  compute(entries, asOfDate) {
+    const day = new Date(asOfDate + 'T12:00:00');
+    day.setDate(day.getDate() - 1);
+    const start = new Date(day); start.setDate(start.getDate() - 59);
+    const window = entries
+      .filter(e => e.date >= start.toISOString().slice(0,10) && e.date <= day.toISOString().slice(0,10) && e.hrv > 0)
+      .map(e => e.hrv);
+    if (window.length < 7) return null;
+    const mean = window.reduce((s,v)=>s+v,0) / window.length;
+    const sd   = Math.sqrt(window.reduce((s,v)=>s+Math.pow(v-mean,2),0) / window.length);
+    return { baseline: +mean.toFixed(1), stdDev: +sd.toFixed(1), n: window.length, threshold: +(mean - sd).toFixed(1) };
+  },
+  isSuppressed(hrv, b) { return b != null && hrv < b.threshold; },
+  consecutiveSuppressedDays(entries, asOfDate) {
+    let count = 0;
+    const sorted = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
+    for (const e of sorted) {
+      if (e.date > asOfDate) continue;
+      const b = this.compute(entries, e.date);
+      if (b && e.hrv && this.isSuppressed(e.hrv, b)) count++;
+      else break;
+    }
+    return count;
+  },
+};
+
+// ── ReadinessScore ────────────────────────────────────────────────────────────
+
+const ReadinessScore = {
+  WEIGHTS: { hrv: 0.5, trend: 0.2, sleep: 0.2, subjective: 0.1 },
+  compute(entry, entries) {
+    const b = AdaptiveBaseline.compute(entries, entry.date);
+    let hrvScore = 50;
+    if (b && entry.hrv) {
+      const dev = (entry.hrv - b.baseline) / Math.max(b.stdDev, 1);
+      hrvScore = Math.max(0, Math.min(100, 50 + dev * 25));
+    }
+    // 3-day trend
+    const sorted = [...entries].sort((a,b)=>a.date.localeCompare(b.date));
+    const idx = sorted.findIndex(e=>e.date===entry.date);
+    const recent = sorted.slice(Math.max(0,idx-3),idx).map(e=>e.hrv).filter(Boolean);
+    let trendScore = 50;
+    if (recent.length >= 2) {
+      const chg = (recent.at(-1) - recent[0]) / recent[0] * 100;
+      trendScore = Math.max(0, Math.min(100, 50 + chg * 5));
+    }
+    // Sleep
+    let sleepScore = 50;
+    if (entry.sleepDuration) {
+      const h = entry.sleepDuration;
+      sleepScore = h >= 9 ? 90 : h >= 7 ? 70 + (h-7)*20 : h >= 5 ? 30 + (h-5)*20 : h*6;
+    }
+    const qualityScore = (entry.sleep / 10) * 100;
+    sleepScore = (sleepScore + qualityScore) / 2;
+    const subjectiveScore = (entry.mood / 10) * 100;
+    const W = this.WEIGHTS;
+    const score = Math.round(Math.max(0, Math.min(100,
+      hrvScore * W.hrv + trendScore * W.trend + sleepScore * W.sleep + subjectiveScore * W.subjective
+    )));
+    return {
+      score,
+      inputs: { hrvScore: +hrvScore.toFixed(1), trendScore: +trendScore.toFixed(1), sleepScore: +sleepScore.toFixed(1), subjectiveScore: +subjectiveScore.toFixed(1), weights: {...W}, baseline: b },
+    };
+  },
+  label(score) {
+    if (score >= 70) return { text: 'Optimal',  cls: 'rs-green',  color: '#34d399' };
+    if (score >= 40) return { text: 'Moderate', cls: 'rs-yellow', color: '#fbbf24' };
+    return               { text: 'Low',      cls: 'rs-red',    color: '#f87171' };
+  },
+};
+
+// ── SuppressionAlerts ─────────────────────────────────────────────────────────
+
+const SuppressionAlerts = {
+  SUGGESTIONS: [
+    'Reduce training intensity or take a full rest day.',
+    'Prioritise 8+ hours of sleep tonight.',
+    'Consider a 20-minute walk instead of your planned session.',
+    'Avoid alcohol and increase protein to support recovery.',
+    'Consistent sleep schedule, dark room, no screens 30 min before bed.',
+  ],
+  load() { try { return JSON.parse(localStorage.getItem('suppression_alerts')||'[]'); } catch { return []; } },
+  save(alerts) { localStorage.setItem('suppression_alerts', JSON.stringify(alerts.slice(0,100))); },
+  check(entries) {
+    const today = todayStr();
+    const n = AdaptiveBaseline.consecutiveSuppressedDays(entries, today);
+    if (n < 3) return null;
+    const existing = this.load().find(a => a.date === today);
+    if (existing) return null;
+    const alert = { id: Date.now(), date: today, type: 'possible_overreach', consecutiveDays: n,
+      suggestion: this.SUGGESTIONS[n % this.SUGGESTIONS.length], acknowledged: false };
+    this.save([alert, ...this.load()]);
+    return alert;
+  },
+  acknowledge(id) {
+    const alerts = this.load().map(a => a.id === id ? {...a, acknowledged: true} : a);
+    this.save(alerts);
+  },
+};
+
+// ── WeeklyDigest ──────────────────────────────────────────────────────────────
+
+const WeeklyDigest = {
+  load() { try { return JSON.parse(localStorage.getItem('weekly_digests')||'[]'); } catch { return []; } },
+  tryGenerate(entries, activities) {
+    if (new Date().getDay() !== 0) return null;
+    const weekEnd = todayStr();
+    if (this.load().find(d=>d.weekEnding===weekEnd)) return null;
+    const weekStart = new Date(weekEnd+'T12:00:00'); weekStart.setDate(weekStart.getDate()-6);
+    const ws = weekStart.toISOString().slice(0,10);
+    const priorEnd = new Date(weekStart); priorEnd.setDate(priorEnd.getDate()-1);
+    const priorStart = new Date(priorEnd); priorStart.setDate(priorStart.getDate()-6);
+    const thisW  = entries.filter(e=>e.date>=ws && e.date<=weekEnd);
+    const priorW = entries.filter(e=>e.date>=priorStart.toISOString().slice(0,10) && e.date<=priorEnd.toISOString().slice(0,10));
+    const avg = arr => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
+    const avgHRV = avg(thisW.map(e=>e.hrv).filter(Boolean));
+    const priorAvgHRV = avg(priorW.map(e=>e.hrv).filter(Boolean));
+    const avgSleep = avg(thisW.map(e=>e.sleepDuration).filter(Boolean));
+    const loadSeries = TrainingLoad.compute(activities, ws, weekEnd);
+    const totalATL = avg(Object.values(loadSeries).map(d=>d.atl)) || 0;
+    const tsbEnd = loadSeries[weekEnd]?.tsb || 0;
+    const suppressionEvents = thisW.filter(e=>{const b=AdaptiveBaseline.compute(entries,e.date);return b&&e.hrv&&AdaptiveBaseline.isSuppressed(e.hrv,b);}).length;
+    const hrvChange = (priorAvgHRV&&avgHRV) ? ((avgHRV-priorAvgHRV)/priorAvgHRV*100).toFixed(0) : null;
+    const parts = [];
+    if (hrvChange!==null) parts.push(+hrvChange>3?`HRV up ${hrvChange}%`:+hrvChange<-3?`HRV down ${Math.abs(hrvChange)}%`:'HRV steady');
+    if (avgSleep) parts.push(avgSleep>=7.5?`sleep averaged ${(+avgSleep).toFixed(1)}h`:`sleep short at ${(+avgSleep).toFixed(1)}h — prioritise rest`);
+    parts.push(totalATL<20?'load was light':totalATL<50?'load was moderate':'load was high');
+    if (suppressionEvents>=3) parts.push(`${suppressionEvents} suppression days — watch your load`);
+    const tsbNote = tsbEnd>10?"You're entering next week fresh.":tsbEnd>-5?"Entering next week balanced.":"Entering next week carrying fatigue — consider an easy start.";
+    const body = parts.join(', ')+'.';
+    const summary = body.charAt(0).toUpperCase()+body.slice(1)+' '+tsbNote;
+    const digest = { weekEnding:weekEnd, weekStarting:ws, avgHRV:avgHRV?+avgHRV.toFixed(1):null, priorAvgHRV:priorAvgHRV?+priorAvgHRV.toFixed(1):null, avgSleep:avgSleep?+avgSleep.toFixed(1):null, totalATL:+totalATL.toFixed(1), tsbEntering:tsbEnd, suppressionEvents, summary, generatedAt:Date.now() };
+    this.save([digest, ...this.load()].slice(0,52));
+    return digest;
+  },
+  save(d) { localStorage.setItem('weekly_digests', JSON.stringify(d)); },
+};
+
+// ── RecoveryCurve ─────────────────────────────────────────────────────────────
+
+const RecoveryCurve = {
+  compute(entries, activities) {
+    const byType = {};
+    for (const act of activities.filter(a=>(a.effort||0)>=RecoveryAnalytics.EFFORT_THRESHOLD)) {
+      const b = AdaptiveBaseline.compute(entries, act.date);
+      if (!b) continue;
+      let days = null;
+      for (let d=1; d<=14; d++) {
+        const cd = new Date(act.date+'T12:00:00'); cd.setDate(cd.getDate()+d);
+        const e = entries.find(e=>e.date===cd.toISOString().slice(0,10));
+        if (e?.hrv && Math.abs(e.hrv-b.baseline)/b.baseline<=0.05) { days=d; break; }
+      }
+      if (days!==null) (byType[act.mappedType]??=[]).push(days);
+    }
+    return Object.entries(byType)
+      .filter(([,d])=>d.length>=2)
+      .map(([type,days])=>({ type, avgDays:+(days.reduce((s,v)=>s+v,0)/days.length).toFixed(1), count:days.length }))
+      .sort((a,b)=>b.avgDays-a.avgDays);
+  },
+};
+
+// ── InsightEngine ─────────────────────────────────────────────────────────────
+
+const InsightEngine = {
+  generate(entries, activities) {
+    const insights = [];
+    // Rule 1: consecutive suppression
+    const consec = AdaptiveBaseline.consecutiveSuppressedDays(entries, todayStr());
+    if (consec >= 2) insights.push({ priority:1, icon:'⚠️', text:`You've been below your HRV baseline for ${consec} consecutive days — consider reducing intensity today.` });
+    // Rule 2: high form window
+    const load = TrainingLoad.latest(activities);
+    if (load.tsb > 15 && load.ctl > 20) insights.push({ priority:2, icon:'🎯', text:`Form score is +${load.tsb} with high fitness — a good window for a hard effort or race.` });
+    // Rule 3: morning vs evening timing
+    const mve = this._morningVsEvening(activities, entries);
+    if (mve) insights.push({ priority:3, ...mve });
+    // Rule 4: HRV rising streak
+    const sorted = [...entries].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,7);
+    const rising = sorted.length>=5 && sorted.every((e,i)=>i===0||e.hrv<=sorted[i-1].hrv);
+    if (rising) insights.push({ priority:2, icon:'📈', text:`HRV has trended up for ${sorted.length} consecutive days — strong recovery signal.` });
+    // Rule 5: pre-PR pattern
+    const prIns = this._prPattern(activities, entries);
+    if (prIns) insights.push({ priority:3, ...prIns });
+    return insights.sort((a,b)=>a.priority-b.priority).slice(0,5);
+  },
+  _morningVsEvening(activities, entries) {
+    const byDate = Object.fromEntries(entries.map(e=>[e.date,e]));
+    const m=[], ev=[];
+    for (const act of activities) {
+      if (!act.startTime) continue;
+      const hr = new Date(act.startTime).getHours();
+      const nd = new Date(act.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
+      const ne = byDate[nd.toISOString().slice(0,10)];
+      const b  = AdaptiveBaseline.compute(entries, act.date);
+      if (!ne?.hrv||!b) continue;
+      const pct = (ne.hrv-b.baseline)/b.baseline*100;
+      if (hr<12) m.push(pct); else if (hr>=17) ev.push(pct);
+    }
+    if (m.length<3||ev.length<3) return null;
+    const am = m.reduce((s,v)=>s+v,0)/m.length, ae = ev.reduce((s,v)=>s+v,0)/ev.length;
+    if (Math.abs(am-ae)<5) return null;
+    const better = am>ae?'morning':'evening', diff = Math.abs(am-ae).toFixed(0);
+    return { icon:'🕐', text:`Your HRV is ${diff}% higher the day after ${better} workouts vs ${am>ae?'evening':'morning'} workouts.` };
+  },
+  _prPattern(activities, entries) {
+    const races = activities.filter(a=>a.isRace&&a.raceConfirmed);
+    if (races.length<3) return null;
+    const hrvsPreRace = races.map(r=>{
+      const d7=new Date(r.date+'T12:00:00'); d7.setDate(d7.getDate()-7);
+      const w=entries.filter(e=>e.date>=d7.toISOString().slice(0,10)&&e.date<r.date&&e.hrv);
+      return w.length?w.reduce((s,e)=>s+e.hrv,0)/w.length:null;
+    }).filter(Boolean);
+    if (hrvsPreRace.length<3) return null;
+    const avg = (hrvsPreRace.reduce((s,v)=>s+v,0)/hrvsPreRace.length).toFixed(0);
+    return { icon:'🏆', text:`Your last ${hrvsPreRace.length} races had a pre-race 7-day avg HRV of ${avg} ms. Use this as your target readiness window.` };
+  },
+};
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+const Notifs = {
+  async request() {
+    if (!('Notification' in window)||Notification.permission==='denied') return false;
+    if (Notification.permission==='granted') return true;
+    return (await Notification.requestPermission())==='granted';
+  },
+  async send(title, body, tag='hrv') {
+    if (Notification.permission!=='granted') return;
+    const n = new Notification(title, { body, icon:'./icon.png', tag, badge:'./icon.png' });
+    setTimeout(()=>n.close(), 10000);
+  },
+  async checkAll(entries, activities) {
+    const alert = SuppressionAlerts.check(entries);
+    if (alert) await this.send('HRV Tracker — Possible Overreach', `${alert.consecutiveDays} days below baseline. ${alert.suggestion}`, 'suppression');
+    const digest = WeeklyDigest.tryGenerate(entries, activities);
+    if (digest) await this.send('Weekly HRV Digest', digest.summary, 'weekly-digest');
+  },
+};
+
 // ── OAuth callback (runs on page load) ───────────────────────────────────────
 
 (async function handleOAuthCallback() {
@@ -530,9 +772,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'history') renderHistory();
-    if (btn.dataset.tab === 'trends')  renderTrends();
-    if (btn.dataset.tab === 'connect') updateStravaUI();
+    if (btn.dataset.tab === 'history')  { renderHistory(); checkSuppressionBanner(); }
+    if (btn.dataset.tab === 'trends')   renderTrends();
+    if (btn.dataset.tab === 'connect')  updateStravaUI();
+    if (btn.dataset.tab === 'insights') renderInsightsTab();
   });
 });
 
@@ -640,12 +883,21 @@ form.addEventListener('submit', e => {
     }),
   };
 
+  const _readiness = ReadinessScore.compute(entry, loadEntries());
+  entry.readinessScore = _readiness.score;
+  entry.readinessInputs = _readiness.inputs;
+  entry.baselineSnapshot = AdaptiveBaseline.compute(loadEntries(), entry.date);
+  entry.createdAt = entry.createdAt || Date.now();
+  entry.updatedAt = Date.now();
+
   const entries = loadEntries();
   const idx = entries.findIndex(en => en.date === date);
   if (idx >= 0) { entries[idx] = entry; showMsg('Entry updated!', 'success'); }
   else          { entries.push(entry);  showMsg('Entry saved!', 'success'); }
   entries.sort((a, b) => b.date.localeCompare(a.date));
   saveEntries(entries);
+  showReadinessResult(_readiness);
+  Notifs.checkAll(loadEntries(), loadActivities());
   resetForm();
   delete form.dataset.editingId;
 });
@@ -666,8 +918,26 @@ function resetForm() {
     document.getElementById(id).value = '';
   });
   clearStravaCards();
+  document.getElementById('readiness-result')?.classList.add('hidden');
   document.getElementById('save-btn').textContent = 'Save Entry';
   delete form.dataset.editingId;
+}
+
+function showReadinessResult(result) {
+  const lbl = ReadinessScore.label(result.score);
+  const el = document.getElementById('readiness-result');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="rs-card">
+      <div class="rs-score ${lbl.cls}">${result.score}</div>
+      <div class="rs-info">
+        <div class="rs-label">${lbl.text} Readiness</div>
+        <div class="rs-breakdown">
+          HRV ${result.inputs.hrvScore.toFixed(0)} · Trend ${result.inputs.trendScore.toFixed(0)} · Sleep ${result.inputs.sleepScore.toFixed(0)} · Feel ${result.inputs.subjectiveScore.toFixed(0)}
+        </div>
+      </div>
+    </div>`;
+  el.classList.remove('hidden');
 }
 
 function showMsg(text, type) {
@@ -869,6 +1139,8 @@ function entryCardHTML(en) {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   });
   const notes = en.notes ? `<div class="entry-notes">"${en.notes}"</div>` : '';
+  const rsLabel = en.readinessScore != null ? ReadinessScore.label(en.readinessScore) : null;
+  const rsBadge = rsLabel ? `<span class="rs-badge ${rsLabel.cls}">${en.readinessScore}</span>` : '';
 
   // Prefer rich Strava rows; fall back to simple pills
   let activityHTML = '';
@@ -896,7 +1168,7 @@ function entryCardHTML(en) {
       </div>
       <div class="entry-header">
         <span class="entry-date">${date}</span>
-        <span><span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>
+        <span>${rsBadge}<span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>
       </div>
       ${raceBadgeHTML(en)}
       <div class="entry-metrics">
@@ -1082,6 +1354,21 @@ function updateStravaUI() {
 
   updateStravaImportBtn();
   updateSyncStatus();
+
+  // Notification permission button
+  const notifBtn = document.getElementById('notif-permission-btn');
+  if (notifBtn) {
+    if (!('Notification' in window) || Notification.permission === 'denied') {
+      notifBtn.classList.add('hidden');
+    } else if (Notification.permission === 'granted') {
+      notifBtn.textContent = 'Notifications enabled';
+      notifBtn.disabled = true;
+    } else {
+      notifBtn.classList.remove('hidden');
+      notifBtn.disabled = false;
+      notifBtn.textContent = 'Enable Notifications';
+    }
+  }
 }
 
 document.getElementById('strava-connect-btn').addEventListener('click', () => {
@@ -1548,11 +1835,214 @@ document.getElementById('manual-sync-btn')?.addEventListener('click', async () =
   }
 });
 
+// ── Insights tab ─────────────────────────────────────────────────────────────
+
+let _recoveryCurveChart = null;
+let _raceCorrelationChart = null;
+
+function renderInsightsTab() {
+  const entries    = loadEntries();
+  const activities = loadActivities();
+
+  // ── AI-style insight cards ──
+  const cardsList = document.getElementById('insight-cards-list');
+  if (cardsList) {
+    const insights = InsightEngine.generate(entries, activities);
+    if (insights.length) {
+      cardsList.innerHTML = insights.map(ins =>
+        `<div class="ai-insight-card">
+          <span class="ins-icon">${ins.icon}</span>
+          <span class="ins-text">${ins.text}</span>
+        </div>`
+      ).join('');
+    } else {
+      cardsList.innerHTML = '<div class="empty-state">Keep logging — insights will appear once you have enough data.</div>';
+    }
+  }
+
+  // ── Weekly digest list ──
+  const digestList = document.getElementById('digest-list');
+  if (digestList) {
+    const digests = WeeklyDigest.load();
+    if (digests.length) {
+      digestList.innerHTML = digests.map(d => {
+        const weekLabel = `Week of ${d.weekStarting} – ${d.weekEnding}`;
+        return `<div class="digest-card">
+          <div class="digest-week">${weekLabel}</div>
+          <div class="digest-summary">${d.summary}</div>
+          <div class="digest-stats">
+            ${d.avgHRV != null ? `<span class="dstat">Avg HRV <strong>${d.avgHRV} ms</strong></span>` : ''}
+            ${d.avgSleep != null ? `<span class="dstat">Avg Sleep <strong>${d.avgSleep}h</strong></span>` : ''}
+            <span class="dstat">Load <strong>${d.totalATL}</strong></span>
+            ${d.suppressionEvents ? `<span class="dstat">Suppression days <strong>${d.suppressionEvents}</strong></span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      digestList.innerHTML = '<div class="empty-state" style="font-size:.85rem;color:var(--text-muted)">Weekly digest generates each Sunday.</div>';
+    }
+  }
+
+  // ── Suppression alert log ──
+  const alertLogList = document.getElementById('alert-log-list');
+  if (alertLogList) {
+    const alerts = SuppressionAlerts.load();
+    if (alerts.length) {
+      alertLogList.innerHTML = alerts.map(a => {
+        const ackHtml = a.acknowledged ? '<span class="al-ack">acknowledged</span>' : '';
+        return `<div class="alert-log-item">
+          <span class="al-date">${a.date}</span>
+          ${a.consecutiveDays} consecutive suppressed days — ${a.suggestion}
+          ${ackHtml}
+        </div>`;
+      }).join('');
+    } else {
+      alertLogList.innerHTML = '<div class="empty-state" style="font-size:.85rem;color:var(--text-muted)">No suppression alerts yet.</div>';
+    }
+  }
+
+  // ── Recovery curve chart ──
+  const rcCtx = document.getElementById('recovery-curve-chart');
+  if (rcCtx) {
+    if (_recoveryCurveChart) { _recoveryCurveChart.destroy(); _recoveryCurveChart = null; }
+    const curveData = RecoveryCurve.compute(entries, activities);
+    if (curveData.length) {
+      _recoveryCurveChart = new Chart(rcCtx.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: curveData.map(c => c.type),
+          datasets: [{
+            label: 'Avg days to baseline recovery',
+            data: curveData.map(c => c.avgDays),
+            backgroundColor: curveData.map(c => TYPE_COLOR[c.type] || DEFAULT_COLOR),
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1a1d27', borderColor: '#2e3348', borderWidth: 1,
+              titleColor: '#e8eaf0', bodyColor: '#8891a8',
+              callbacks: { label: ctx => `${ctx.raw} days avg (${curveData[ctx.dataIndex].count} sessions)` },
+            },
+          },
+          scales: {
+            x: { ticks: { color: '#8891a8' }, grid: { color: '#2e3348' }, title: { display: true, text: 'Days', color: '#8891a8' } },
+            y: { ticks: { color: '#8891a8' }, grid: { color: '#1e2235' } },
+          },
+        },
+      });
+    } else {
+      rcCtx.parentElement.innerHTML = '<p class="chart-empty">Not enough data for recovery curve yet.</p>';
+    }
+  }
+
+  // ── Race correlation chart + pre-race strips ──
+  const races = activities.filter(a => a.isRace && a.raceConfirmed);
+  const racePoints = races.map(r => {
+    const d7 = new Date(r.date + 'T12:00:00'); d7.setDate(d7.getDate() - 7);
+    const weekEntries = entries.filter(e => e.date >= d7.toISOString().slice(0, 10) && e.date < r.date && e.hrv);
+    const avgHrv = weekEntries.length ? weekEntries.reduce((s, e) => s + e.hrv, 0) / weekEntries.length : null;
+    const raceEntry = entries.find(e => e.date === r.date);
+    const readiness = raceEntry?.readinessScore ?? null;
+    return { name: r.name, date: r.date, avgHrv: avgHrv ? +avgHrv.toFixed(1) : null, readiness };
+  }).filter(p => p.avgHrv != null);
+
+  const raceCtx = document.getElementById('race-correlation-chart');
+  if (raceCtx) {
+    if (_raceCorrelationChart) { _raceCorrelationChart.destroy(); _raceCorrelationChart = null; }
+    if (racePoints.length >= 2) {
+      _raceCorrelationChart = new Chart(raceCtx.getContext('2d'), {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Race readiness',
+            data: racePoints.map(p => ({ x: p.readiness ?? 50, y: p.avgHrv })),
+            backgroundColor: 'rgba(251,191,36,.7)',
+            pointRadius: 7,
+            pointHoverRadius: 9,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1a1d27', borderColor: '#2e3348', borderWidth: 1,
+              titleColor: '#e8eaf0', bodyColor: '#8891a8',
+              callbacks: {
+                label: ctx => {
+                  const p = racePoints[ctx.dataIndex];
+                  return `${p.name} (${p.date}): RS ${ctx.raw.x}, HRV avg ${ctx.raw.y} ms`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { title: { display: true, text: 'Readiness Score', color: '#8891a8' }, ticks: { color: '#8891a8' }, grid: { color: '#2e3348' } },
+            y: { title: { display: true, text: '7-day avg HRV (ms)', color: '#8891a8' }, ticks: { color: '#8891a8' }, grid: { color: '#2e3348' } },
+          },
+        },
+      });
+    } else {
+      raceCtx.parentElement.innerHTML = '<p class="chart-empty">Confirm 2+ races to see race readiness correlation.</p>';
+    }
+  }
+
+  // Pre-race strips
+  const strips = document.getElementById('pre-race-strips');
+  if (strips) {
+    strips.innerHTML = racePoints.map(p =>
+      `<div class="pre-race-strip">
+        <span class="prs-name">${p.name} <span style="color:var(--text-muted);font-weight:400">${p.date}</span></span>
+        <span class="prs-hrv">${p.avgHrv} ms HRV</span>
+        ${p.readiness != null ? `<span class="prs-rs">RS ${p.readiness}</span>` : ''}
+      </div>`
+    ).join('');
+  }
+}
+
+// ── Suppression banner (History tab) ─────────────────────────────────────────
+
+function checkSuppressionBanner() {
+  const banner = document.getElementById('suppression-banner');
+  if (!banner) return;
+  const alert = SuppressionAlerts.load().find(a => !a.acknowledged);
+  if (!alert) { banner.classList.add('hidden'); return; }
+  banner.classList.remove('hidden');
+  banner.innerHTML = `
+    <span class="banner-text">
+      ⚠️ <strong>Possible overreach:</strong> ${alert.consecutiveDays} consecutive days below your HRV baseline.
+      ${alert.suggestion}
+    </span>
+    <button class="banner-dismiss" title="Dismiss" data-alert-id="${alert.id}">✕</button>`;
+  banner.querySelector('.banner-dismiss').addEventListener('click', () => {
+    SuppressionAlerts.acknowledge(alert.id);
+    banner.classList.add('hidden');
+  });
+}
+
+// ── Notification permission button ───────────────────────────────────────────
+
+document.getElementById('notif-permission-btn')?.addEventListener('click', async () => {
+  const granted = await Notifs.request();
+  updateStravaUI();
+  if (granted) {
+    const btn = document.getElementById('notif-permission-btn');
+    if (btn) { btn.textContent = 'Notifications enabled'; btn.disabled = true; }
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 updateStravaUI();
 updateSyncStatus();
 updateTrainingContext();
+checkSuppressionBanner();
+Notifs.checkAll(loadEntries(), loadActivities());
 StravaSync.autoSync().then(() => {
   updateSyncStatus();
   updateTrainingContext();
