@@ -2292,3 +2292,43 @@ StravaSync.autoSync().then(() => {
   updateTrainingContext();
   StravaSync.processRaceQueue();
 });
+
+// ── Pull to refresh ──────────────────────────────────────────────────────────
+
+(function initPullToRefresh() {
+  const THRESHOLD = 65;
+  const indicator = document.getElementById('ptr-indicator');
+  const label     = document.getElementById('ptr-label');
+  let startY = 0, pulling = false, dist = 0;
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0 && e.touches.length === 1) {
+      startY  = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    dist = e.touches[0].clientY - startY;
+    if (dist <= 0) { pulling = false; return; }
+
+    indicator.classList.add('ptr-visible');
+    indicator.classList.toggle('ptr-ready', dist >= THRESHOLD);
+    label.textContent = dist >= THRESHOLD ? 'Release to refresh' : 'Pull to refresh';
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    if (dist >= THRESHOLD) {
+      indicator.classList.remove('ptr-ready');
+      indicator.classList.add('ptr-spinning');
+      label.textContent = 'Refreshing…';
+      setTimeout(() => window.location.reload(), 400);
+    } else {
+      indicator.classList.remove('ptr-visible', 'ptr-ready');
+    }
+    dist = 0;
+  });
+})();

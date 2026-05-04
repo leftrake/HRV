@@ -35,6 +35,40 @@ body {
   min-height: 100vh;
 }
 
+/* ── Pull to refresh ── */
+#ptr-indicator {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-xs);
+  gap: 6px;
+  height: 0;
+  justify-content: flex-end;
+  overflow: hidden;
+  padding-bottom: 0;
+  text-align: center;
+  transition: height .2s ease, padding-bottom .2s ease;
+  will-change: height;
+}
+#ptr-indicator.ptr-visible {
+  height: 64px;
+  padding-bottom: 10px;
+}
+#ptr-indicator.ptr-ready { color: var(--accent); }
+#ptr-spinner {
+  height: 22px;
+  width: 22px;
+  transition: transform .3s ease;
+}
+#ptr-indicator.ptr-ready #ptr-spinner { transform: rotate(180deg); }
+#ptr-indicator.ptr-spinning #ptr-spinner {
+  animation: ptr-spin .7s linear infinite;
+}
+@keyframes ptr-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Header ── */
 header {
   background: var(--surface);
