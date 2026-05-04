@@ -1020,7 +1020,7 @@ function showReadinessResult(result) {
       <div class="rs-score ${lbl.cls}">${result.score}</div>
       <div class="rs-info">
         <div class="rs-label">${lbl.text} Readiness</div>
-        <div class="rs-rec" style="color:${rec.color};font-weight:600;font-size:.875rem;margin:2px 0">${rec.text}</div>
+        <div class="rs-rec" style="color:${rec.color}">${rec.text}</div>
         <div class="rs-breakdown">
           HRV ${result.inputs.hrvScore.toFixed(0)} · Trend ${result.inputs.trendScore.toFixed(0)} · Sleep ${result.inputs.sleepScore.toFixed(0)} · Feel ${result.inputs.subjectiveScore.toFixed(0)}
         </div>
@@ -1998,7 +1998,7 @@ function renderInsightsTab() {
         return `<div class="ai-insight-card" data-key="${key.replace(/"/g,'&quot;')}">
           <span class="ins-icon">${ins.icon}</span>
           <span class="ins-text">${ins.text}</span>
-          <button class="ins-dismiss-btn" title="Dismiss" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:0 4px;margin-left:auto;flex-shrink:0" data-key="${key.replace(/"/g,'&quot;')}">✕</button>
+          <button class="ins-dismiss-btn" data-key="${key.replace(/"/g,'&quot;')}" title="Dismiss">✕</button>
         </div>`;
       }).join('');
       cardsList.querySelectorAll('.ins-dismiss-btn').forEach(btn => {
@@ -2031,7 +2031,7 @@ function renderInsightsTab() {
         </div>`;
       }).join('');
     } else {
-      digestList.innerHTML = '<div class="empty-state" style="font-size:.85rem;color:var(--text-muted)">Weekly digest generates each Sunday.</div>';
+      digestList.innerHTML = '<div class="empty-state">Weekly digest generates each Sunday.</div>';
     }
   }
 
@@ -2049,7 +2049,7 @@ function renderInsightsTab() {
         </div>`;
       }).join('');
     } else {
-      alertLogList.innerHTML = '<div class="empty-state" style="font-size:.85rem;color:var(--text-muted)">No suppression alerts yet.</div>';
+      alertLogList.innerHTML = '<div class="empty-state">No suppression alerts yet.</div>';
     }
   }
 
@@ -2199,7 +2199,7 @@ function renderInsightsTab() {
   if (strips) {
     strips.innerHTML = racePoints.map(p =>
       `<div class="pre-race-strip">
-        <span class="prs-name">${p.name} <span style="color:var(--text-muted);font-weight:400">${p.date}</span></span>
+        <span class="prs-name">${p.name} <span class="prs-date">${p.date}</span></span>
         <span class="prs-hrv">${p.avgHrv} ms HRV</span>
         ${p.readiness != null ? `<span class="prs-rs">RS ${p.readiness}</span>` : ''}
       </div>`
