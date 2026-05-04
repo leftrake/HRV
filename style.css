@@ -158,6 +158,7 @@ input[type="range"] {
   cursor: pointer;
   height: 6px;
   padding: 0;
+  touch-action: pan-y;
   width: 100%;
 }
 input[type="range"]::-webkit-slider-thumb {

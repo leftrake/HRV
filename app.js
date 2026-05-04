@@ -995,7 +995,7 @@ function resetForm() {
   const sleepSlider = document.getElementById('sleep-duration');
   if (sleepSlider) { sleepSlider.value = 7; document.getElementById('sleep-duration-val').textContent = '7h'; }
   document.querySelector('#sleep-quality').value = '3';
-  document.querySelectorAll('.quality-btn').forEach(b => b.classList.toggle('active', b.dataset.value === '2'));
+  document.querySelectorAll('.quality-btn').forEach(b => b.classList.toggle('active', b.dataset.value === '3'));
   // Reset feel tap
   document.getElementById('feel-today').value = '';
   document.querySelectorAll('.feel-btn').forEach(b => b.classList.remove('active'));
@@ -1960,8 +1960,8 @@ function updateSyncProgress(text, done = false) {
   if (done) setTimeout(() => { el.className = 'import-msg hidden'; }, 5000);
 }
 
-document.getElementById('manual-sync-btn')?.addEventListener('click', async () => {
-  const btn = document.getElementById('manual-sync-btn');
+document.getElementById('manual-sync-btn')?.addEventListener('click', async function() {
+  const btn = this;
   btn.disabled = true;
   btn.textContent = 'Syncing…';
   try {
