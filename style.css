@@ -895,3 +895,112 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
 .pre-race-strip .prs-name { font-weight: 600; flex: 1; }
 .pre-race-strip .prs-hrv  { color: var(--accent); font-weight: 700; }
 .pre-race-strip .prs-rs   { color: var(--text-muted); }
+
+/* ── Feel tap buttons ── */
+.feel-tap-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.feel-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 500;
+  padding: 8px 16px;
+  transition: all .15s;
+}
+.feel-btn:hover { border-color: var(--accent); color: var(--accent); }
+.feel-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Flag row ── */
+.flag-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.flag-btn {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: .8125rem;
+  font-weight: 500;
+  gap: 4px;
+  padding: 6px 12px;
+  transition: all .15s;
+  user-select: none;
+}
+.flag-btn input { display: none; }
+.flag-btn:has(input:checked) {
+  background: rgba(248,113,113,.15);
+  border-color: rgba(248,113,113,.4);
+  color: var(--red);
+}
+.flag-btn:hover { border-color: var(--accent); }
+
+/* ── Sleep row ── */
+.sleep-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.sleep-hours-group, .sleep-quality-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sleep-hours-label, .sleep-quality-label {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted);
+}
+.sleep-hours-val {
+  font-size: .875rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+}
+.quality-tap-row {
+  display: flex;
+  gap: 4px;
+}
+.quality-btn {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: .8rem;
+  padding: 6px 4px;
+  text-align: center;
+  transition: all .15s;
+}
+.quality-btn:hover { border-color: var(--accent); color: var(--accent); }
+.quality-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Building data note */
+.building-data-note {
+  color: var(--text-muted);
+  font-size: .78rem;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+
+@media (max-width: 480px) {
+  .sleep-row { grid-template-columns: 1fr; }
+  .feel-tap-row { gap: 6px; }
+  .feel-btn { font-size: .8125rem; padding: 7px 12px; }
+}

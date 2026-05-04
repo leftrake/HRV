@@ -50,6 +50,49 @@
         <div id="training-context" class="training-context hidden"></div>
 
         <div class="form-group">
+          <label>How do you feel today?</label>
+          <div class="feel-tap-row" id="feel-tap-row">
+            <button type="button" class="feel-btn" data-value="4">😄 Great</button>
+            <button type="button" class="feel-btn" data-value="3">🙂 Good</button>
+            <button type="button" class="feel-btn" data-value="2">😐 Average</button>
+            <button type="button" class="feel-btn" data-value="1">😓 Rough</button>
+          </div>
+          <input type="hidden" id="feel-today" value="" />
+        </div>
+
+        <div class="form-group">
+          <label>Flags <span class="unit">(optional)</span></label>
+          <div class="flag-row" id="flag-row">
+            <label class="flag-btn"><input type="checkbox" id="flag-illness" value="illness" /><span>🤒 Illness</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-stress" value="stress" /><span>😰 High stress</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-alcohol" value="alcohol" /><span>🍺 Alcohol</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-travel" value="travel" /><span>✈️ Travel</span></label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Sleep</label>
+          <div class="sleep-row">
+            <div class="sleep-hours-group">
+              <span class="sleep-hours-label">Hours</span>
+              <input type="range" id="sleep-duration" min="4" max="12" step="0.5" value="7" />
+              <span class="sleep-hours-val" id="sleep-duration-val">7h</span>
+            </div>
+            <div class="sleep-quality-group">
+              <span class="sleep-quality-label">Quality</span>
+              <div class="quality-tap-row" id="quality-tap-row">
+                <button type="button" class="quality-btn" data-value="5">⭐⭐⭐</button>
+                <button type="button" class="quality-btn" data-value="4">⭐⭐</button>
+                <button type="button" class="quality-btn" data-value="3">⭐</button>
+                <button type="button" class="quality-btn active" data-value="2">—</button>
+                <button type="button" class="quality-btn" data-value="1">😟</button>
+              </div>
+              <input type="hidden" id="sleep-quality" value="3" />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
           <label>Device readings <span class="unit">(optional)</span></label>
           <div class="metrics-grid">
             <div class="metric-card">
@@ -62,13 +105,7 @@
               <span class="metric-card-icon">⚡</span>
               <input type="number" id="readiness" min="0" max="100" placeholder="—" />
               <span class="metric-card-unit">/100</span>
-              <span class="metric-card-label">Readiness</span>
-            </div>
-            <div class="metric-card">
-              <span class="metric-card-icon">😴</span>
-              <input type="number" id="sleep-duration" min="0" max="24" step="0.5" placeholder="—" />
-              <span class="metric-card-unit">hrs</span>
-              <span class="metric-card-label">Sleep</span>
+              <span class="metric-card-label">Device Readiness</span>
             </div>
             <div class="metric-card">
               <span class="metric-card-icon">🌬️</span>
@@ -103,11 +140,6 @@
               <span class="mood-label">Stress</span>
               <input type="range" id="stress" min="1" max="10" value="5" />
               <span class="mood-value" id="stress-val">5</span>
-            </div>
-            <div class="mood-row">
-              <span class="mood-label">Sleep quality</span>
-              <input type="range" id="sleep" min="1" max="10" value="5" />
-              <span class="mood-value" id="sleep-val">5</span>
             </div>
             <div class="mood-row">
               <span class="mood-label">Mood</span>
@@ -158,6 +190,7 @@
       <div class="history-controls">
         <input type="text" id="history-search" placeholder="Search notes or activities…" />
         <button id="export-btn" class="secondary small">Export JSON</button>
+        <button id="export-csv-btn" class="secondary small">Export CSV</button>
       </div>
       <div id="history-list"></div>
     </section>
@@ -243,6 +276,14 @@
           </div>
           <div id="sync-progress" class="import-msg hidden"></div>
           <p class="footnote">Activities sync automatically every 6 hours. Use "Import from Strava" on the Log tab to pull data for a specific date.</p>
+          <div class="form-group" style="margin-top:10px">
+            <label>Daily check-in reminder</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="time" id="notif-time" style="width:auto" value="08:00" />
+              <button type="button" id="save-notif-time-btn" class="secondary small">Save</button>
+            </div>
+            <p class="footnote" id="notif-time-status">Set a time to be reminded to log your HRV.</p>
+          </div>
           <button type="button" id="notif-permission-btn" class="secondary small" style="margin-top:8px">Enable Notifications</button>
           <button type="button" id="strava-disconnect-btn" class="secondary small" style="margin-top:8px">Disconnect</button>
         </div>

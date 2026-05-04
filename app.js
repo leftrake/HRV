@@ -535,9 +535,11 @@ const ReadinessScore = {
       const h = entry.sleepDuration;
       sleepScore = h >= 9 ? 90 : h >= 7 ? 70 + (h-7)*20 : h >= 5 ? 30 + (h-5)*20 : h*6;
     }
-    const qualityScore = (entry.sleep / 10) * 100;
-    sleepScore = (sleepScore + qualityScore) / 2;
-    const subjectiveScore = (entry.mood / 10) * 100;
+    // sleepQuality is 1-5 tap scale; fall back to old sleep slider (1-10)
+    const rawQuality = entry.sleepQuality ? (entry.sleepQuality / 5) * 100 : (entry.sleep / 10) * 100;
+    sleepScore = (sleepScore + rawQuality) / 2;
+    const feelMap = {4: 100, 3: 70, 2: 45, 1: 15};
+    const subjectiveScore = entry.feelToday ? (feelMap[entry.feelToday] ?? 50) : (entry.mood / 10) * 100;
     const W = this.WEIGHTS;
     const score = Math.round(Math.max(0, Math.min(100,
       hrvScore * W.hrv + trendScore * W.trend + sleepScore * W.sleep + subjectiveScore * W.subjective
@@ -644,6 +646,15 @@ const RecoveryCurve = {
   },
 };
 
+// ── InsightCards ──────────────────────────────────────────────────────────────
+
+const InsightCards = {
+  STORAGE: 'insight_cards_dismissed',
+  load() { try { return JSON.parse(localStorage.getItem(this.STORAGE)||'[]'); } catch { return []; } },
+  isDismissed(key) { return this.load().includes(key); },
+  dismiss(key) { const d = this.load(); if (!d.includes(key)) { d.push(key); localStorage.setItem(this.STORAGE, JSON.stringify(d.slice(-50))); } },
+};
+
 // ── InsightEngine ─────────────────────────────────────────────────────────────
 
 const InsightEngine = {
@@ -718,6 +729,19 @@ const Notifs = {
     if (alert) await this.send('HRV Tracker — Possible Overreach', `${alert.consecutiveDays} days below baseline. ${alert.suggestion}`, 'suppression');
     const digest = WeeklyDigest.tryGenerate(entries, activities);
     if (digest) await this.send('Weekly HRV Digest', digest.summary, 'weekly-digest');
+    const notifTime = localStorage.getItem('notif_time');
+    if (notifTime && Notification.permission === 'granted') {
+      const [h, m] = notifTime.split(':').map(Number);
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      const diffMs = Math.abs(now - target);
+      const lastNotif = parseInt(localStorage.getItem('last_checkin_notif')||'0',10);
+      const todayEntries = entries.filter(e => e.date === todayStr());
+      if (diffMs < 5*60*1000 && !todayEntries.length && Date.now()-lastNotif > 23*3600*1000) {
+        localStorage.setItem('last_checkin_notif', String(Date.now()));
+        await this.send('Time to log your HRV!', 'Open HRV Tracker to log today\'s check-in.', 'checkin');
+      }
+    }
   },
 };
 
@@ -830,10 +854,33 @@ function updateDateQuickBtns() {
   });
 }
 
-['energy', 'stress', 'sleep', 'mood'].forEach(id => {
+['energy', 'stress', 'mood'].forEach(id => {
   const slider  = document.getElementById(id);
   const display = document.getElementById(`${id}-val`);
   slider.addEventListener('input', () => { display.textContent = slider.value; });
+});
+
+// Sleep duration slider
+document.getElementById('sleep-duration').addEventListener('input', function() {
+  document.getElementById('sleep-duration-val').textContent = this.value + 'h';
+});
+
+// Feel tap buttons
+document.querySelectorAll('.feel-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.feel-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('feel-today').value = btn.dataset.value;
+  });
+});
+
+// Sleep quality tap buttons
+document.querySelectorAll('.quality-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sleep-quality').value = btn.dataset.value;
+  });
 });
 
 hrvInput.addEventListener('input', updateHrvIndicator);
@@ -854,16 +901,20 @@ form.addEventListener('submit', e => {
       .split(',').map(s => s.trim()).filter(Boolean),
   ];
 
+  const sleepQuality = parseInt(document.getElementById('sleep-quality').value, 10) || 3;
   const entry = {
-    id:         Date.now(),
+    id:           Date.now(),
     date,
     hrv,
-    energy:     +document.getElementById('energy').value,
-    stress:     +document.getElementById('stress').value,
-    sleep:      +document.getElementById('sleep').value,
-    mood:       +document.getElementById('mood').value,
+    energy:       +document.getElementById('energy').value,
+    stress:       +document.getElementById('stress').value,
+    sleep:        sleepQuality * 2, // map 1-5 → 2-10 for backwards compat
+    mood:         +document.getElementById('mood').value,
     activities,
     notes:        document.getElementById('notes').value.trim(),
+    feelToday:    parseInt(document.getElementById('feel-today').value, 10) || null,
+    sleepQuality,
+    flags:        [...document.querySelectorAll('.flag-btn input:checked')].map(cb => cb.value),
     restingHR:    optInt('resting-hr'),
     readiness:    optInt('readiness'),
     sleepDuration:optFloat('sleep-duration'),
@@ -909,14 +960,24 @@ function resetForm() {
   dateInput.value = todayStr();
   updateDateDisplay();
   updateDateQuickBtns();
-  ['energy', 'stress', 'sleep', 'mood'].forEach(id => {
+  ['energy', 'stress', 'mood'].forEach(id => {
     document.getElementById(id).value = 5;
     document.getElementById(`${id}-val`).textContent = '5';
   });
   indicator.style.background = 'var(--border)';
-  ['resting-hr','readiness','sleep-duration','resp-rate','spo2','body-battery'].forEach(id => {
+  ['resting-hr','readiness','resp-rate','spo2','body-battery'].forEach(id => {
     document.getElementById(id).value = '';
   });
+  // Reset sleep section
+  const sleepSlider = document.getElementById('sleep-duration');
+  if (sleepSlider) { sleepSlider.value = 7; document.getElementById('sleep-duration-val').textContent = '7h'; }
+  document.querySelector('#sleep-quality').value = '3';
+  document.querySelectorAll('.quality-btn').forEach(b => b.classList.toggle('active', b.dataset.value === '2'));
+  // Reset feel tap
+  document.getElementById('feel-today').value = '';
+  document.querySelectorAll('.feel-btn').forEach(b => b.classList.remove('active'));
+  // Reset flags
+  document.querySelectorAll('.flag-btn input').forEach(cb => { cb.checked = false; });
   clearStravaCards();
   document.getElementById('readiness-result')?.classList.add('hidden');
   document.getElementById('save-btn').textContent = 'Save Entry';
@@ -925,6 +986,10 @@ function resetForm() {
 
 function showReadinessResult(result) {
   const lbl = ReadinessScore.label(result.score);
+  const rec = result.score >= 70 ? { text: 'Hard effort OK', color: 'var(--green)' }
+            : result.score >= 55 ? { text: 'Moderate training', color: 'var(--yellow)' }
+            : result.score >= 40 ? { text: 'Easy session only', color: 'var(--yellow)' }
+            : { text: 'Rest recommended', color: 'var(--red)' };
   const el = document.getElementById('readiness-result');
   if (!el) return;
   el.innerHTML = `
@@ -932,6 +997,7 @@ function showReadinessResult(result) {
       <div class="rs-score ${lbl.cls}">${result.score}</div>
       <div class="rs-info">
         <div class="rs-label">${lbl.text} Readiness</div>
+        <div class="rs-rec" style="color:${rec.color};font-weight:600;font-size:.875rem;margin:2px 0">${rec.text}</div>
         <div class="rs-breakdown">
           HRV ${result.inputs.hrvScore.toFixed(0)} · Trend ${result.inputs.trendScore.toFixed(0)} · Sleep ${result.inputs.sleepScore.toFixed(0)} · Feel ${result.inputs.subjectiveScore.toFixed(0)}
         </div>
@@ -1050,9 +1116,29 @@ function loadEntryIntoForm(entry) {
   hrvInput.value = entry.hrv || '';
   updateHrvIndicator();
 
-  ['energy', 'stress', 'sleep', 'mood'].forEach(id => {
+  ['energy', 'stress', 'mood'].forEach(id => {
     document.getElementById(id).value = entry[id] ?? 5;
     document.getElementById(`${id}-val`).textContent = entry[id] ?? 5;
+  });
+
+  // Sleep section
+  const sleepSlider = document.getElementById('sleep-duration');
+  if (sleepSlider) {
+    sleepSlider.value = entry.sleepDuration ?? 7;
+    document.getElementById('sleep-duration-val').textContent = (entry.sleepDuration ?? 7) + 'h';
+  }
+  const sq = entry.sleepQuality ?? 3;
+  document.getElementById('sleep-quality').value = sq;
+  document.querySelectorAll('.quality-btn').forEach(b => b.classList.toggle('active', +b.dataset.value === sq));
+
+  // Feel tap
+  const ft = entry.feelToday ?? null;
+  document.getElementById('feel-today').value = ft ?? '';
+  document.querySelectorAll('.feel-btn').forEach(b => b.classList.toggle('active', +b.dataset.value === ft));
+
+  // Flags
+  document.querySelectorAll('.flag-btn input').forEach(cb => {
+    cb.checked = (entry.flags || []).includes(cb.value);
   });
 
   // Activities — check matching boxes, put rest in custom field
@@ -1076,8 +1162,7 @@ function loadEntryIntoForm(entry) {
 
   // Device readings
   const deviceFields = { 'resting-hr': 'restingHR', 'readiness': 'readiness',
-    'sleep-duration': 'sleepDuration', 'resp-rate': 'respRate',
-    'spo2': 'spo2', 'body-battery': 'bodyBattery' };
+    'resp-rate': 'respRate', 'spo2': 'spo2', 'body-battery': 'bodyBattery' };
   Object.entries(deviceFields).forEach(([id, key]) => {
     document.getElementById(id).value = entry[key] ?? '';
   });
@@ -1100,6 +1185,20 @@ historySearch.addEventListener('input', renderHistory);
 document.getElementById('export-btn').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(loadEntries(), null, 2)], { type: 'application/json' });
   const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'hrv-entries.json' });
+  a.click();
+});
+
+document.getElementById('export-csv-btn').addEventListener('click', () => {
+  const entries = loadEntries();
+  if (!entries.length) return;
+  const headers = ['date','hrv','energy','stress','sleep','mood','restingHR','readiness','sleepDuration','respRate','spo2','bodyBattery','readinessScore','activities','notes'];
+  const rows = entries.map(e => headers.map(h => {
+    const v = h === 'activities' ? (e.activities||[]).join(';') : e[h];
+    return v == null ? '' : String(v).includes(',') ? `"${v}"` : v;
+  }).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'hrv-entries.csv' });
   a.click();
 });
 
@@ -1141,6 +1240,11 @@ function entryCardHTML(en) {
   const notes = en.notes ? `<div class="entry-notes">"${en.notes}"</div>` : '';
   const rsLabel = en.readinessScore != null ? ReadinessScore.label(en.readinessScore) : null;
   const rsBadge = rsLabel ? `<span class="rs-badge ${rsLabel.cls}">${en.readinessScore}</span>` : '';
+  const feelLabels = {4:'😄 Great', 3:'🙂 Good', 2:'😐 Average', 1:'😓 Rough'};
+  const flagIcons = {illness:'🤒', stress:'😰', alcohol:'🍺', travel:'✈️'};
+  const flagsHTML = en.flags?.length
+    ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${en.flags.map(f=>`<span class="activity-pill">${flagIcons[f]||''} ${f}</span>`).join('')}</div>`
+    : '';
 
   // Prefer rich Strava rows; fall back to simple pills
   let activityHTML = '';
@@ -1171,10 +1275,12 @@ function entryCardHTML(en) {
         <span>${rsBadge}<span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>
       </div>
       ${raceBadgeHTML(en)}
+      ${flagsHTML}
       <div class="entry-metrics">
+        ${en.feelToday ? `<div class="metric">Feel <span>${feelLabels[en.feelToday]||''}</span></div>` : ''}
         <div class="metric">Energy <span>${en.energy}/10</span></div>
         <div class="metric">Stress <span>${en.stress}/10</span></div>
-        <div class="metric">Sleep <span>${en.sleep}/10</span></div>
+        ${en.sleepQuality ? `<div class="metric">Sleep quality <span>${en.sleepQuality}/5 ⭐</span></div>` : `<div class="metric">Sleep <span>${en.sleep}/10</span></div>`}
         <div class="metric">Mood <span>${en.mood}/10</span></div>
       </div>
       ${deviceMetricsHTML(en)}
@@ -1241,13 +1347,23 @@ function renderStats(entries) {
   const trend = entries.length >= 2
     ? (entries.at(-1).hrv - entries[0].hrv > 0 ? '↑' : '↓') : '—';
 
+  const hrEntries = entries.filter(e => e.restingHR != null);
+  const hrStat = hrEntries.length
+    ? `<div class="stat-card"><div class="stat-value" style="color:var(--red)">${(hrEntries.reduce((s,e)=>s+e.restingHR,0)/hrEntries.length).toFixed(0)}</div><div class="stat-label">Avg Resting HR</div></div>`
+    : '';
+  const load = TrainingLoad.latest(loadActivities());
+  const loadStat = load.ctl > 0
+    ? `<div class="stat-card"><div class="stat-value" style="color:var(--accent)">${load.ctl}</div><div class="stat-label">Fitness (CTL)</div></div>`
+    : '';
+
   grid.innerHTML = `
     <div class="stat-card"><div class="stat-value" style="color:var(--accent)">${avg(hrvs)}</div><div class="stat-label">Avg HRV (ms)</div></div>
     <div class="stat-card"><div class="stat-value" style="color:var(--green)">${Math.max(...hrvs)}</div><div class="stat-label">Peak HRV</div></div>
     <div class="stat-card"><div class="stat-value" style="color:var(--red)">${Math.min(...hrvs)}</div><div class="stat-label">Low HRV</div></div>
     <div class="stat-card"><div class="stat-value">${trend}</div><div class="stat-label">Trend</div></div>
     <div class="stat-card"><div class="stat-value">${entries.length}</div><div class="stat-label">Entries</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:var(--accent)">${avg(entries.map(e => e.energy))}</div><div class="stat-label">Avg Energy</div></div>`;
+    <div class="stat-card"><div class="stat-value" style="color:var(--accent)">${avg(entries.map(e => e.energy))}</div><div class="stat-label">Avg Energy</div></div>
+    ${hrStat}${loadStat}`;
 }
 
 function renderChart(entries) {
@@ -1257,6 +1373,12 @@ function renderChart(entries) {
 
   const labels  = entries.map(en => new Date(en.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
   const hrvData = entries.map(e => e.hrv);
+
+  // 7-day rolling average
+  const rollingAvg = hrvData.map((_, i) => {
+    const window = hrvData.slice(Math.max(0, i - 6), i + 1).filter(v => v != null);
+    return window.length ? +(window.reduce((s, v) => s + v, 0) / window.length).toFixed(1) : null;
+  });
 
   chart = new Chart(ctx, {
     type: 'line',
@@ -1274,6 +1396,17 @@ function renderChart(entries) {
           pointHoverRadius: 7,
           tension: 0.35,
           fill: true,
+        },
+        {
+          label: '7-day avg',
+          data: rollingAvg,
+          borderColor: 'rgba(251,191,36,.8)',
+          borderWidth: 2,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false,
+          spanGaps: true,
         },
         {
           label: 'Mood',
@@ -1848,13 +1981,22 @@ function renderInsightsTab() {
   const cardsList = document.getElementById('insight-cards-list');
   if (cardsList) {
     const insights = InsightEngine.generate(entries, activities);
-    if (insights.length) {
-      cardsList.innerHTML = insights.map(ins =>
-        `<div class="ai-insight-card">
+    const visible = insights.filter(ins => !InsightCards.isDismissed(ins.text.slice(0, 40)));
+    if (visible.length) {
+      cardsList.innerHTML = visible.map(ins => {
+        const key = ins.text.slice(0, 40);
+        return `<div class="ai-insight-card" data-key="${key.replace(/"/g,'&quot;')}">
           <span class="ins-icon">${ins.icon}</span>
           <span class="ins-text">${ins.text}</span>
-        </div>`
-      ).join('');
+          <button class="ins-dismiss-btn" title="Dismiss" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:0 4px;margin-left:auto;flex-shrink:0" data-key="${key.replace(/"/g,'&quot;')}">✕</button>
+        </div>`;
+      }).join('');
+      cardsList.querySelectorAll('.ins-dismiss-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          InsightCards.dismiss(btn.dataset.key);
+          btn.closest('.ai-insight-card').remove();
+        });
+      });
     } else {
       cardsList.innerHTML = '<div class="empty-state">Keep logging — insights will appear once you have enough data.</div>';
     }
@@ -1906,6 +2048,18 @@ function renderInsightsTab() {
   if (rcCtx) {
     if (_recoveryCurveChart) { _recoveryCurveChart.destroy(); _recoveryCurveChart = null; }
     const curveData = RecoveryCurve.compute(entries, activities);
+
+    // Count instances per type for building-data message
+    const allByType = {};
+    for (const act of activities.filter(a=>(a.effort||0)>=RecoveryAnalytics.EFFORT_THRESHOLD)) {
+      if (AdaptiveBaseline.compute(entries, act.date)) {
+        (allByType[act.mappedType]??=[]).push(1);
+      }
+    }
+    const buildingTypes = Object.entries(allByType)
+      .filter(([t,arr])=>arr.length<3&&arr.length>0&&!curveData.find(c=>c.type===t))
+      .map(([t,arr])=>`${actIcon(t)} ${t}: ${arr.length}/3 sessions`);
+
     if (curveData.length) {
       _recoveryCurveChart = new Chart(rcCtx.getContext('2d'), {
         type: 'bar',
@@ -1935,8 +2089,20 @@ function renderInsightsTab() {
           },
         },
       });
+      if (buildingTypes.length) {
+        const note = document.createElement('p');
+        note.className = 'building-data-note';
+        note.textContent = `Building data: ${buildingTypes.join(' · ')}`;
+        rcCtx.parentElement.appendChild(note);
+      }
     } else {
       rcCtx.parentElement.innerHTML = '<p class="chart-empty">Not enough data for recovery curve yet.</p>';
+      if (buildingTypes.length) {
+        const note = document.createElement('p');
+        note.className = 'building-data-note';
+        note.textContent = `Building data: ${buildingTypes.join(' · ')}`;
+        rcCtx.parentElement.appendChild(note);
+      }
     }
   }
 
@@ -1954,17 +2120,44 @@ function renderInsightsTab() {
   const raceCtx = document.getElementById('race-correlation-chart');
   if (raceCtx) {
     if (_raceCorrelationChart) { _raceCorrelationChart.destroy(); _raceCorrelationChart = null; }
-    if (racePoints.length >= 2) {
+    if (racePoints.length < 5) {
+      raceCtx.parentElement.innerHTML = `<p class="chart-empty">Log ${5 - racePoints.length} more confirmed race${5 - racePoints.length !== 1 ? 's' : ''} to unlock the race readiness correlation chart.</p>`;
+    } else {
+      const trendDatasets = [];
+      if (racePoints.length >= 2) {
+        const n = racePoints.length;
+        const sumX = racePoints.reduce((s,p)=>s+(p.readiness??50),0);
+        const sumY = racePoints.reduce((s,p)=>s+p.avgHrv,0);
+        const sumXY = racePoints.reduce((s,p)=>s+(p.readiness??50)*p.avgHrv,0);
+        const sumX2 = racePoints.reduce((s,p)=>s+Math.pow(p.readiness??50,2),0);
+        const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+        const intercept = (sumY - slope*sumX) / n;
+        const xMin = Math.min(...racePoints.map(p=>p.readiness??50)) - 5;
+        const xMax = Math.max(...racePoints.map(p=>p.readiness??50)) + 5;
+        trendDatasets.push({
+          label: 'Trend',
+          type: 'line',
+          data: [{x: xMin, y: slope*xMin+intercept}, {x: xMax, y: slope*xMax+intercept}],
+          borderColor: 'rgba(91,141,238,.6)',
+          borderWidth: 1.5,
+          borderDash: [4,3],
+          pointRadius: 0,
+          fill: false,
+        });
+      }
       _raceCorrelationChart = new Chart(raceCtx.getContext('2d'), {
         type: 'scatter',
         data: {
-          datasets: [{
-            label: 'Race readiness',
-            data: racePoints.map(p => ({ x: p.readiness ?? 50, y: p.avgHrv })),
-            backgroundColor: 'rgba(251,191,36,.7)',
-            pointRadius: 7,
-            pointHoverRadius: 9,
-          }],
+          datasets: [
+            {
+              label: 'Race readiness',
+              data: racePoints.map(p => ({ x: p.readiness ?? 50, y: p.avgHrv })),
+              backgroundColor: 'rgba(251,191,36,.7)',
+              pointRadius: 7,
+              pointHoverRadius: 9,
+            },
+            ...trendDatasets,
+          ],
         },
         options: {
           responsive: true,
@@ -1975,6 +2168,7 @@ function renderInsightsTab() {
               titleColor: '#e8eaf0', bodyColor: '#8891a8',
               callbacks: {
                 label: ctx => {
+                  if (ctx.datasetIndex > 0) return null;
                   const p = racePoints[ctx.dataIndex];
                   return `${p.name} (${p.date}): RS ${ctx.raw.x}, HRV avg ${ctx.raw.y} ms`;
                 },
@@ -1987,8 +2181,6 @@ function renderInsightsTab() {
           },
         },
       });
-    } else {
-      raceCtx.parentElement.innerHTML = '<p class="chart-empty">Confirm 2+ races to see race readiness correlation.</p>';
     }
   }
 
@@ -2036,12 +2228,30 @@ document.getElementById('notif-permission-btn')?.addEventListener('click', async
   }
 });
 
+document.getElementById('save-notif-time-btn')?.addEventListener('click', async () => {
+  const t = document.getElementById('notif-time').value;
+  if (!t) return;
+  localStorage.setItem('notif_time', t);
+  const granted = await Notifs.request();
+  const statusEl = document.getElementById('notif-time-status');
+  if (statusEl) statusEl.textContent = granted
+    ? `Reminder set for ${t} daily.`
+    : 'Enable notifications above first.';
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 updateStravaUI();
 updateSyncStatus();
 updateTrainingContext();
 checkSuppressionBanner();
+
+const savedNotifTime = localStorage.getItem('notif_time');
+if (savedNotifTime) {
+  const el = document.getElementById('notif-time');
+  if (el) el.value = savedNotifTime;
+}
+
 Notifs.checkAll(loadEntries(), loadActivities());
 StravaSync.autoSync().then(() => {
   updateSyncStatus();
