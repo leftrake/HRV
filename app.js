@@ -210,7 +210,8 @@ const TrainingLoad = {
 
   latest(activities) {
     const end   = todayStr();
-    const start = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    const s90 = new Date(); s90.setDate(s90.getDate() - 90);
+    const start = localDateStr(s90);
     return this.compute(activities, start, end)[end] || { atl: 0, ctl: 0, tsb: 0, effort: 0 };
   },
 };
@@ -263,8 +264,11 @@ const RecoveryAnalytics = {
   },
 };
 
-function todayStr()     { return new Date().toISOString().slice(0, 10); }
-function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayStr()     { return localDateStr(); }
+function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return localDateStr(d); }
 
 // ── Strava ───────────────────────────────────────────────────────────────────
 
@@ -820,7 +824,7 @@ document.querySelectorAll('.date-quick-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const d = new Date();
     d.setDate(d.getDate() + +btn.dataset.offset);
-    dateInput.value = d.toISOString().slice(0, 10);
+    dateInput.value = localDateStr(d);
     updateDateDisplay();
     updateDateQuickBtns();
     clearStravaCards();
@@ -1330,7 +1334,7 @@ function renderTrends() {
   if (days > 0) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
-    const cs = cutoff.toISOString().slice(0, 10);
+    const cs = localDateStr(cutoff);
     entries = entries.filter(en => en.date >= cs);
   }
   renderStats(entries);
@@ -1684,7 +1688,7 @@ function renderLoadChart(rangeDays = 30) {
 
   const end   = todayStr();
   const days  = rangeDays > 0 ? rangeDays : 90;
-  const start = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const _s = new Date(); _s.setDate(_s.getDate() - days); const start = localDateStr(_s);
   const series = TrainingLoad.compute(activities, start, end);
 
   const labels = Object.keys(series);
