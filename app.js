@@ -2293,6 +2293,20 @@ StravaSync.autoSync().then(() => {
   StravaSync.processRaceQueue();
 });
 
+// ── iOS PWA keyboard fix ─────────────────────────────────────────────────────
+// In standalone (home-screen) mode iOS doesn't show the keyboard on tap unless
+// focus() is called explicitly from a touchend event handler.
+(function iosKeyboardFix() {
+  const NEEDS_KEYBOARD = new Set(['text','number','password','email','search','tel','url','']);
+  document.addEventListener('touchend', function(e) {
+    const el = e.target;
+    if (el.tagName === 'TEXTAREA' ||
+        (el.tagName === 'INPUT' && NEEDS_KEYBOARD.has(el.type || ''))) {
+      setTimeout(function() { el.focus(); }, 0);
+    }
+  }, { passive: true });
+})();
+
 // ── Pull to refresh ──────────────────────────────────────────────────────────
 
 (function initPullToRefresh() {
