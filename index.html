@@ -359,6 +359,44 @@
         </div>
       </div>
 
+      <!-- Cloud Sync -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#2d333b">☁️</div>
+          <div class="provider-info">
+            <h2>Cloud Sync</h2>
+            <p class="provider-desc">Keep data in sync across all your devices via a private GitHub Gist</p>
+          </div>
+          <span id="gist-status-dot" class="status-dot disconnected" title="Not connected"></span>
+        </div>
+
+        <div id="gist-setup-form">
+          <ol class="setup-steps">
+            <li>Go to <strong>github.com/settings/tokens</strong></li>
+            <li>Click <em>Generate new token (classic)</em></li>
+            <li>Check the <code>gist</code> scope, then generate</li>
+            <li>Paste the token below — do this on every device</li>
+          </ol>
+          <div class="form-group">
+            <label>GitHub Personal Access Token</label>
+            <input type="password" id="gist-token" placeholder="ghp_••••••••••••••••••••" autocomplete="off" />
+          </div>
+          <button type="button" id="gist-connect-btn">Connect &amp; Sync</button>
+          <p class="footnote">Your token is stored only in this browser's local storage and is only ever sent to api.github.com.</p>
+        </div>
+
+        <div id="gist-connected-view" class="hidden">
+          <p class="connected-msg">✓ Connected — data syncs automatically on each save</p>
+          <div class="sync-row">
+            <span id="gist-last-sync" class="footnote">Never synced</span>
+            <button type="button" id="gist-sync-now-btn" class="secondary small">Sync Now</button>
+          </div>
+          <button type="button" id="gist-disconnect-btn" class="secondary small" style="margin-top:8px">Disconnect</button>
+        </div>
+
+        <div id="gist-msg" class="import-msg hidden"></div>
+      </div>
+
     </section>
   </main>
 

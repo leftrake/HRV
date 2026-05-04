@@ -59,6 +59,122 @@ function loadActivities() {
 }
 function saveActivities(acts) { localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(acts)); }
 
+// ── GitHub Gist sync ──────────────────────────────────────────────────────────
+
+const GistSync = {
+  TOKEN_KEY:     'gist_token',
+  GIST_ID_KEY:   'gist_id',
+  LAST_SYNC_KEY: 'gist_last_sync',
+  FILENAME:      'hrv-wellness-data.json',
+
+  getToken()    { return localStorage.getItem(this.TOKEN_KEY)   || ''; },
+  getGistId()   { return localStorage.getItem(this.GIST_ID_KEY) || ''; },
+  isConfigured(){ return !!(this.getToken() && this.getGistId()); },
+
+  packData() {
+    return {
+      version: 1,
+      exportedAt: Date.now(),
+      entries:    loadEntries(),
+      activities: loadActivities(),
+    };
+  },
+
+  mergeEntries(local, remote) {
+    const map = new Map();
+    for (const e of [...local, ...remote]) {
+      const cur = map.get(e.date);
+      if (!cur || (e.updatedAt || 0) >= (cur.updatedAt || 0)) map.set(e.date, e);
+    }
+    return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  mergeActivities(local, remote) {
+    const map = new Map();
+    for (const a of [...local, ...remote]) map.set(a.id, a);
+    return [...map.values()];
+  },
+
+  unpackData(data) {
+    if (!data || data.version !== 1) return;
+    saveEntries(this.mergeEntries(loadEntries(), data.entries || []));
+    saveActivities(this.mergeActivities(loadActivities(), data.activities || []));
+  },
+
+  async _req(method, path, token, body) {
+    const res = await fetch(`https://api.github.com${path}`, {
+      method,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    return res.json();
+  },
+
+  async findGist(token) {
+    const gists = await this._req('GET', '/gists?per_page=100', token);
+    const found = gists.find(g => g.files && g.files[this.FILENAME]);
+    return found ? found.id : null;
+  },
+
+  async createGist(token) {
+    const g = await this._req('POST', '/gists', token, {
+      description: 'HRV Wellness Tracker data',
+      public: false,
+      files: { [this.FILENAME]: { content: JSON.stringify(this.packData()) } },
+    });
+    return g.id;
+  },
+
+  async push(token, gistId) {
+    await this._req('PATCH', `/gists/${gistId}`, token, {
+      files: { [this.FILENAME]: { content: JSON.stringify(this.packData()) } },
+    });
+    localStorage.setItem(this.LAST_SYNC_KEY, Date.now().toString());
+  },
+
+  async pull(token, gistId) {
+    const g    = await this._req('GET', `/gists/${gistId}`, token);
+    const file = g.files?.[this.FILENAME];
+    if (!file) return;
+    const text    = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+    const content = JSON.parse(text);
+    this.unpackData(content);
+    localStorage.setItem(this.LAST_SYNC_KEY, Date.now().toString());
+  },
+
+  async sync() {
+    const token  = this.getToken();
+    const gistId = this.getGistId();
+    if (!token || !gistId) throw new Error('Not configured');
+    await this.pull(token, gistId);
+    await this.push(token, gistId);
+    updateGistUI();
+    refreshAllViews();
+  },
+
+  // Called once on page load; skips if synced recently
+  async autoSync() {
+    if (!this.isConfigured()) return;
+    const last = parseInt(localStorage.getItem(this.LAST_SYNC_KEY) || '0', 10);
+    if (Date.now() - last < 5 * 60 * 1000) return;
+    try { await this.sync(); } catch (e) { console.warn('GistSync auto:', e); }
+  },
+
+  // Fire-and-forget push after each save
+  pushSilent() {
+    if (!this.isConfigured()) return;
+    this.push(this.getToken(), this.getGistId())
+      .then(updateGistUI)
+      .catch(e => console.warn('GistSync push:', e));
+  },
+};
+
 // ── Strava sync ───────────────────────────────────────────────────────────────
 
 const StravaSync = {
@@ -970,6 +1086,7 @@ form.addEventListener('submit', e => {
   else          { entries.push(entry);  showMsg('Entry saved!', 'success'); }
   entries.sort((a, b) => b.date.localeCompare(a.date));
   saveEntries(entries);
+  GistSync.pushSilent();
   showReadinessResult(_readiness);
   Notifs.checkAll(loadEntries(), loadActivities());
   resetForm();
@@ -2273,11 +2390,123 @@ function updateNotifPermissionBtn() {
   }
 }
 
+// ── Gist Sync UI ─────────────────────────────────────────────────────────────
+
+function fmtSyncTime(ts) {
+  if (!ts) return 'Never synced';
+  const d = new Date(parseInt(ts, 10));
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1)  return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24)   return `${diffH}h ago`;
+  return d.toLocaleDateString();
+}
+
+function updateGistUI() {
+  const configured  = GistSync.isConfigured();
+  const setupEl     = document.getElementById('gist-setup-form');
+  const connectedEl = document.getElementById('gist-connected-view');
+  const dot         = document.getElementById('gist-status-dot');
+  if (!setupEl || !connectedEl) return;
+
+  if (configured) {
+    setupEl.classList.add('hidden');
+    connectedEl.classList.remove('hidden');
+    if (dot) { dot.className = 'status-dot connected'; dot.title = 'Connected'; }
+    const lastEl = document.getElementById('gist-last-sync');
+    if (lastEl) lastEl.textContent = fmtSyncTime(localStorage.getItem(GistSync.LAST_SYNC_KEY));
+  } else {
+    setupEl.classList.remove('hidden');
+    connectedEl.classList.add('hidden');
+    if (dot) { dot.className = 'status-dot disconnected'; dot.title = 'Not connected'; }
+    const tokenEl = document.getElementById('gist-token');
+    if (tokenEl) tokenEl.value = GistSync.getToken();
+  }
+}
+
+function setGistMsg(text, type = '') {
+  const el = document.getElementById('gist-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className   = `import-msg${text ? '' : ' hidden'}${type ? ' ' + type : ''}`;
+}
+
+document.getElementById('gist-connect-btn')?.addEventListener('click', async () => {
+  const tokenEl = document.getElementById('gist-token');
+  const token   = tokenEl?.value.trim();
+  if (!token) { setGistMsg('Paste your GitHub personal access token first.', 'error'); return; }
+
+  setGistMsg('Validating token…');
+  const btn = document.getElementById('gist-connect-btn');
+  btn.disabled = true;
+
+  try {
+    // Verify token works
+    await GistSync._req('GET', '/user', token);
+
+    // Find existing HRV gist or create one
+    setGistMsg('Looking for existing data…');
+    let gistId = await GistSync.findGist(token);
+    if (!gistId) {
+      setGistMsg('Creating new private gist…');
+      gistId = await GistSync.createGist(token);
+    }
+
+    localStorage.setItem(GistSync.TOKEN_KEY,   token);
+    localStorage.setItem(GistSync.GIST_ID_KEY, gistId);
+
+    setGistMsg('Syncing data…');
+    await GistSync.sync();
+    setGistMsg('');
+    updateGistUI();
+  } catch (e) {
+    setGistMsg(`Error: ${e.message}. Check your token has the "gist" scope.`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('gist-sync-now-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('gist-sync-now-btn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  setGistMsg('');
+  try {
+    await GistSync.sync();
+    setGistMsg('Synced successfully.', 'success');
+    setTimeout(() => setGistMsg(''), 3000);
+  } catch (e) {
+    setGistMsg(`Sync failed: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sync Now';
+    updateGistUI();
+  }
+});
+
+document.getElementById('gist-disconnect-btn')?.addEventListener('click', () => {
+  localStorage.removeItem(GistSync.TOKEN_KEY);
+  localStorage.removeItem(GistSync.GIST_ID_KEY);
+  localStorage.removeItem(GistSync.LAST_SYNC_KEY);
+  setGistMsg('');
+  updateGistUI();
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+function refreshAllViews() {
+  renderHistory();
+  renderTrends();
+  checkSuppressionBanner();
+}
 
 updateStravaUI();
 updateSyncStatus();
 updateTrainingContext();
+updateGistUI();
 checkSuppressionBanner();
 
 const savedNotifTime = localStorage.getItem('notif_time');
@@ -2292,6 +2521,7 @@ StravaSync.autoSync().then(() => {
   updateTrainingContext();
   StravaSync.processRaceQueue();
 });
+GistSync.autoSync();
 
 // ── iOS PWA keyboard fix ─────────────────────────────────────────────────────
 // In standalone (home-screen) mode iOS doesn't show the keyboard on tap unless
