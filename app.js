@@ -733,17 +733,36 @@ const Notifs = {
     if (alert) await this.send('HRV Tracker — Possible Overreach', `${alert.consecutiveDays} days below baseline. ${alert.suggestion}`, 'suppression');
     const digest = WeeklyDigest.tryGenerate(entries, activities);
     if (digest) await this.send('Weekly HRV Digest', digest.summary, 'weekly-digest');
-    const notifTime = localStorage.getItem('notif_time');
-    if (notifTime && Notification.permission === 'granted') {
-      const [h, m] = notifTime.split(':').map(Number);
+    if (Notification.permission === 'granted') {
       const now = new Date();
-      const target = new Date(); target.setHours(h, m, 0, 0);
-      const diffMs = Math.abs(now - target);
-      const lastNotif = parseInt(localStorage.getItem('last_checkin_notif')||'0',10);
-      const todayEntries = entries.filter(e => e.date === todayStr());
-      if (diffMs < 5*60*1000 && !todayEntries.length && Date.now()-lastNotif > 23*3600*1000) {
-        localStorage.setItem('last_checkin_notif', String(Date.now()));
-        await this.send('Time to log your HRV!', 'Open HRV Tracker to log today\'s check-in.', 'checkin');
+      const todayEntry = entries.find(e => e.date === todayStr());
+
+      // Morning check-in reminder
+      const morningTime = localStorage.getItem('notif_time');
+      if (morningTime) {
+        const [h, m] = morningTime.split(':').map(Number);
+        const target = new Date(); target.setHours(h, m, 0, 0);
+        const lastNotif = parseInt(localStorage.getItem('last_checkin_notif')||'0',10);
+        if (Math.abs(now - target) < 5*60*1000 && !todayEntry && Date.now()-lastNotif > 23*3600*1000) {
+          localStorage.setItem('last_checkin_notif', String(Date.now()));
+          await this.send('Time to log your HRV!', 'Open HRV Tracker to log today\'s check-in.', 'checkin');
+        }
+      }
+
+      // End-of-day reminder — fires if no entry yet, or entry is missing key fields
+      const eodTime = localStorage.getItem('notif_eod_time');
+      if (eodTime) {
+        const [h, m] = eodTime.split(':').map(Number);
+        const target = new Date(); target.setHours(h, m, 0, 0);
+        const lastEod = parseInt(localStorage.getItem('last_eod_notif')||'0',10);
+        const entryIncomplete = !todayEntry || !todayEntry.activities?.length || !todayEntry.sleepDuration;
+        if (Math.abs(now - target) < 5*60*1000 && entryIncomplete && Date.now()-lastEod > 23*3600*1000) {
+          localStorage.setItem('last_eod_notif', String(Date.now()));
+          const msg = !todayEntry
+            ? "You haven't logged today yet — add your HRV and how you felt."
+            : "Don't forget to log today's activities and sleep before bed.";
+          await this.send('Complete today\'s log', msg, 'eod-reminder');
+        }
       }
     }
   },
@@ -1492,20 +1511,7 @@ function updateStravaUI() {
   updateStravaImportBtn();
   updateSyncStatus();
 
-  // Notification permission button
-  const notifBtn = document.getElementById('notif-permission-btn');
-  if (notifBtn) {
-    if (!('Notification' in window) || Notification.permission === 'denied') {
-      notifBtn.classList.add('hidden');
-    } else if (Notification.permission === 'granted') {
-      notifBtn.textContent = 'Notifications enabled';
-      notifBtn.disabled = true;
-    } else {
-      notifBtn.classList.remove('hidden');
-      notifBtn.disabled = false;
-      notifBtn.textContent = 'Enable Notifications';
-    }
-  }
+  updateNotifPermissionBtn();
 }
 
 document.getElementById('strava-connect-btn').addEventListener('click', () => {
@@ -2238,10 +2244,34 @@ document.getElementById('save-notif-time-btn')?.addEventListener('click', async 
   localStorage.setItem('notif_time', t);
   const granted = await Notifs.request();
   const statusEl = document.getElementById('notif-time-status');
-  if (statusEl) statusEl.textContent = granted
-    ? `Reminder set for ${t} daily.`
-    : 'Enable notifications above first.';
+  if (statusEl) statusEl.textContent = granted ? `Reminder set for ${t} daily.` : 'Enable notifications above first.';
+  updateNotifPermissionBtn();
 });
+
+document.getElementById('save-notif-eod-btn')?.addEventListener('click', async () => {
+  const t = document.getElementById('notif-eod-time').value;
+  if (!t) return;
+  localStorage.setItem('notif_eod_time', t);
+  const granted = await Notifs.request();
+  const statusEl = document.getElementById('notif-eod-status');
+  if (statusEl) statusEl.textContent = granted ? `End-of-day reminder set for ${t}.` : 'Enable notifications above first.';
+  updateNotifPermissionBtn();
+});
+
+function updateNotifPermissionBtn() {
+  const btn = document.getElementById('notif-permission-btn');
+  if (!btn) return;
+  if (!('Notification' in window) || Notification.permission === 'denied') {
+    btn.classList.add('hidden');
+  } else if (Notification.permission === 'granted') {
+    btn.textContent = '✓ Notifications enabled';
+    btn.disabled = true;
+  } else {
+    btn.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Enable Notifications';
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -2251,10 +2281,10 @@ updateTrainingContext();
 checkSuppressionBanner();
 
 const savedNotifTime = localStorage.getItem('notif_time');
-if (savedNotifTime) {
-  const el = document.getElementById('notif-time');
-  if (el) el.value = savedNotifTime;
-}
+if (savedNotifTime) { const el = document.getElementById('notif-time'); if (el) el.value = savedNotifTime; }
+const savedEodTime = localStorage.getItem('notif_eod_time');
+if (savedEodTime) { const el = document.getElementById('notif-eod-time'); if (el) el.value = savedEodTime; }
+updateNotifPermissionBtn();
 
 Notifs.checkAll(loadEntries(), loadActivities());
 StravaSync.autoSync().then(() => {

@@ -1002,3 +1002,59 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
   .feel-tap-row { gap: 6px; }
   .feel-btn { font-size: .8125rem; padding: 7px 12px; }
 }
+
+/* ── Notification time pickers ── */
+.notif-times-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.notif-time-row {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  align-items: center;
+}
+
+.notif-time-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-time-title {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.notif-time-desc {
+  font-size: .78rem;
+  color: var(--text-muted);
+}
+
+.notif-time-control {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.notif-time-control input[type="time"] {
+  width: auto;
+  padding: 6px 10px;
+  font-size: .875rem;
+}
+
+.notif-time-status {
+  grid-column: 1 / -1;
+  margin: 0;
+}

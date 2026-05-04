@@ -276,15 +276,6 @@
           </div>
           <div id="sync-progress" class="import-msg hidden"></div>
           <p class="footnote">Activities sync automatically every 6 hours. Use "Import from Strava" on the Log tab to pull data for a specific date.</p>
-          <div class="form-group" style="margin-top:10px">
-            <label>Daily check-in reminder</label>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input type="time" id="notif-time" style="width:auto" value="08:00" />
-              <button type="button" id="save-notif-time-btn" class="secondary small">Save</button>
-            </div>
-            <p class="footnote" id="notif-time-status">Set a time to be reminded to log your HRV.</p>
-          </div>
-          <button type="button" id="notif-permission-btn" class="secondary small" style="margin-top:8px">Enable Notifications</button>
           <button type="button" id="strava-disconnect-btn" class="secondary small" style="margin-top:8px">Disconnect</button>
         </div>
       </div>
@@ -323,6 +314,42 @@
           </div>
         </div>
         <div id="garmin-import-msg" class="import-msg hidden"></div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#5b8dee">🔔</div>
+          <div class="provider-info">
+            <h2>Notifications</h2>
+            <p class="provider-desc">Reminders to log your data and suppression alerts</p>
+          </div>
+        </div>
+        <button type="button" id="notif-permission-btn" class="secondary small">Enable Notifications</button>
+        <div class="notif-times-grid">
+          <div class="notif-time-row">
+            <div class="notif-time-label">
+              <span class="notif-time-title">Morning check-in</span>
+              <span class="notif-time-desc">Reminder to log your HRV when you wake up</span>
+            </div>
+            <div class="notif-time-control">
+              <input type="time" id="notif-time" value="08:00" />
+              <button type="button" id="save-notif-time-btn" class="secondary small">Save</button>
+            </div>
+            <p class="footnote notif-time-status" id="notif-time-status"></p>
+          </div>
+          <div class="notif-time-row">
+            <div class="notif-time-label">
+              <span class="notif-time-title">End-of-day reminder</span>
+              <span class="notif-time-desc">Reminder to finish logging activities, sleep, and notes</span>
+            </div>
+            <div class="notif-time-control">
+              <input type="time" id="notif-eod-time" value="21:00" />
+              <button type="button" id="save-notif-eod-btn" class="secondary small">Save</button>
+            </div>
+            <p class="footnote notif-time-status" id="notif-eod-status"></p>
+          </div>
+        </div>
       </div>
 
     </section>
