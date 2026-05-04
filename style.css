@@ -100,6 +100,17 @@ select {
   padding: 10px 14px;
   transition: border-color .15s;
   width: 100%;
+  touch-action: manipulation;
+}
+/* Prevent iOS Safari auto-zoom on focus (requires ≥16px) */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="password"],
+  input[type="time"],
+  textarea,
+  select { font-size: 16px; }
 }
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
@@ -396,6 +407,7 @@ input[type="range"]::-moz-range-thumb {
   letter-spacing: 0;
   padding: 5px 12px;
   text-transform: none;
+  touch-action: manipulation;
   transition: border-color .15s, background .15s;
 }
 .tag:hover { border-color: var(--accent); }
@@ -443,6 +455,7 @@ button {
   font-size: .9375rem;
   font-weight: 600;
   padding: 12px 24px;
+  touch-action: manipulation;
   transition: background .15s;
 }
 button:hover { background: var(--accent-hover); }
