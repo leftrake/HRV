@@ -482,7 +482,6 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
-  position: relative;
 }
 
 .entry-header {
@@ -523,9 +522,8 @@ button.small { padding: 7px 14px; font-size: .8125rem; }
   display: flex;
   align-items: center;
   gap: 6px;
-  position: absolute;
-  right: 12px;
-  top: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .edit-btn {

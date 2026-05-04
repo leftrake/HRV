@@ -1270,13 +1270,13 @@ function entryCardHTML(en) {
 
   return `
     <div class="entry-card">
-      <div class="card-actions">
-        <button class="edit-btn" data-id="${en.id}" title="Edit">Edit</button>
-        <button class="delete-btn" data-id="${en.id}" title="Delete">✕</button>
-      </div>
       <div class="entry-header">
         <span class="entry-date">${date}</span>
         <span>${rsBadge}<span class="entry-hrv">${en.hrv}</span><span class="hrv-badge ${cls.cls}">${cls.label}</span></span>
+        <div class="card-actions">
+          <button class="edit-btn" data-id="${en.id}" title="Edit">Edit</button>
+          <button class="delete-btn" data-id="${en.id}" title="Delete">✕</button>
+        </div>
       </div>
       ${raceBadgeHTML(en)}
       ${flagsHTML}
