@@ -219,6 +219,29 @@
       </div>
       <div class="stats-grid" id="stats-grid"></div>
 
+      <div class="section-label">Goal Race Tracker</div>
+      <div class="race-goal-card">
+        <div class="race-goal-inputs">
+          <div class="race-goal-field">
+            <label for="goal-race-date">Race date</label>
+            <input type="date" id="goal-race-date" />
+          </div>
+          <div class="race-goal-field">
+            <label for="goal-hrv">Target HRV <span class="unit">ms</span></label>
+            <input type="number" id="goal-hrv" min="1" max="300" placeholder="e.g. 70" />
+          </div>
+          <div class="race-goal-field race-goal-name-field">
+            <label for="goal-race-name">Race name <span class="unit">optional</span></label>
+            <input type="text" id="goal-race-name" placeholder="e.g. Boston Marathon" />
+          </div>
+        </div>
+        <div class="race-goal-btns">
+          <button type="button" id="save-race-goal-btn">Set Goal</button>
+          <button type="button" id="clear-race-goal-btn" class="secondary small hidden">Clear</button>
+        </div>
+        <div id="race-goal-result"></div>
+      </div>
+
       <div class="section-label">Training Load</div>
       <div class="chart-wrap" id="load-chart-wrap">
         <canvas id="load-chart"></canvas>

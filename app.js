@@ -175,6 +175,51 @@ const GistSync = {
   },
 };
 
+// ── Race Goal Tracker ────────────────────────────────────────────────────────
+
+const RaceGoal = {
+  KEY: 'race_goal',
+
+  load()    { try { return JSON.parse(localStorage.getItem(this.KEY) || 'null'); } catch { return null; } },
+  save(g)   { localStorage.setItem(this.KEY, JSON.stringify(g)); },
+  clear()   { localStorage.removeItem(this.KEY); },
+
+  daysUntil(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.ceil((d - t) / 86400000);
+  },
+
+  linReg(points) {
+    const n = points.length;
+    if (n < 2) return null;
+    const xm = points.reduce((s, p) => s + p.x, 0) / n;
+    const ym = points.reduce((s, p) => s + p.y, 0) / n;
+    const num = points.reduce((s, p) => s + (p.x - xm) * (p.y - ym), 0);
+    const den = points.reduce((s, p) => s + (p.x - xm) ** 2, 0);
+    if (!den) return null;
+    const m = num / den, b = ym - m * xm;
+    return { slope: m, predict: x => +(m * x + b).toFixed(1) };
+  },
+
+  project(entries) {
+    const goal = this.load();
+    if (!goal?.date || !goal?.hrv || entries.length < 3) return null;
+    const days = this.daysUntil(goal.date);
+    if (days <= 0) return { past: true, goal };
+
+    const epoch = new Date('2020-01-01').getTime();
+    const toX   = d => (new Date(d + 'T12:00:00') - epoch) / 86400000;
+    const reg   = this.linReg(entries.map(e => ({ x: toX(e.date), y: e.hrv })));
+    if (!reg) return null;
+
+    const projected  = Math.max(1, reg.predict(toX(goal.date)));
+    const recent     = entries.slice(-7);
+    const currentAvg = +(recent.reduce((s, e) => s + e.hrv, 0) / recent.length).toFixed(1);
+    return { goal, days, projected, currentAvg, onTrack: projected >= goal.hrv };
+  },
+};
+
 // ── Strava sync ───────────────────────────────────────────────────────────────
 
 const StravaSync = {
@@ -1475,6 +1520,7 @@ function renderTrends() {
   }
   renderStats(entries);
   renderChart(entries);
+  renderRaceGoal();
   renderLoadChart(days);
   renderInsights();
 }
@@ -1571,6 +1617,21 @@ function renderChart(entries) {
           spanGaps: true,
           yAxisID: 'y3',
         }] : []),
+        // Race goal target line
+        ...(() => {
+          const g = RaceGoal.load();
+          if (!g?.hrv) return [];
+          return [{
+            label: `Target HRV (${g.hrv} ms)`,
+            data: Array(entries.length).fill(g.hrv),
+            borderColor: 'rgba(52,211,153,.55)',
+            borderWidth: 1.5,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+          }];
+        })(),
       ],
     },
     options: {
@@ -1602,6 +1663,105 @@ function renderChart(entries) {
     },
   });
 }
+
+// ── Race Goal Tracker UI ─────────────────────────────────────────────────────
+
+function renderRaceGoal() {
+  const resultEl = document.getElementById('race-goal-result');
+  const clearBtn = document.getElementById('clear-race-goal-btn');
+  if (!resultEl) return;
+
+  const goal = RaceGoal.load();
+
+  // Pre-fill form inputs
+  const dateEl = document.getElementById('goal-race-date');
+  const hrvEl  = document.getElementById('goal-hrv');
+  const nameEl = document.getElementById('goal-race-name');
+  if (goal) {
+    if (dateEl) dateEl.value = goal.date || '';
+    if (hrvEl)  hrvEl.value  = goal.hrv  || '';
+    if (nameEl) nameEl.value = goal.name || '';
+    clearBtn?.classList.remove('hidden');
+  } else {
+    clearBtn?.classList.add('hidden');
+    resultEl.innerHTML = '';
+    return;
+  }
+
+  const allEntries = loadEntries().slice().sort((a, b) => a.date.localeCompare(b.date));
+  const proj = RaceGoal.project(allEntries);
+
+  if (!proj) {
+    resultEl.innerHTML = '<p class="rg-hint">Log at least 3 HRV entries to see your projection.</p>';
+    return;
+  }
+  if (proj.past) {
+    resultEl.innerHTML = '<p class="rg-hint">Race date has passed — set a new goal to start tracking.</p>';
+    return;
+  }
+
+  const { days, projected, currentAvg, onTrack } = proj;
+  const diff    = +(projected - goal.hrv).toFixed(1);
+  const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+  const statusCls  = onTrack ? 'on-track' : 'off-track';
+  const statusIcon = onTrack ? '✅' : '⚠️';
+  const statusMsg  = onTrack
+    ? `On track — projected ${Math.abs(diff)} ms above target`
+    : `Behind — projected ${Math.abs(diff)} ms below target`;
+
+  const dateStr  = new Date(goal.date + 'T12:00:00')
+    .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const raceLine = goal.name ? `${goal.name} · ${dateStr}` : dateStr;
+
+  resultEl.innerHTML = `
+    <div class="rg-separator"></div>
+    <div class="rg-header">
+      <span class="rg-race-name">🏁 ${raceLine}</span>
+      <span class="rg-days-badge">${days} day${days !== 1 ? 's' : ''} away</span>
+    </div>
+    <div class="rg-stats">
+      <div class="rg-stat">
+        <span class="rg-stat-val">${currentAvg}</span>
+        <span class="rg-stat-lbl">Current avg <em>7-day</em></span>
+      </div>
+      <span class="rg-arrow">→</span>
+      <div class="rg-stat">
+        <span class="rg-stat-val" style="color:var(--accent)">${projected}</span>
+        <span class="rg-stat-lbl">Projected <em>race day</em></span>
+      </div>
+      <span class="rg-arrow">vs</span>
+      <div class="rg-stat">
+        <span class="rg-stat-val" style="color:var(--green)">${goal.hrv}</span>
+        <span class="rg-stat-lbl">Your target</span>
+      </div>
+    </div>
+    <div class="rg-status ${statusCls}">${statusIcon} ${statusMsg}</div>
+  `;
+}
+
+document.getElementById('save-race-goal-btn')?.addEventListener('click', () => {
+  const date = document.getElementById('goal-race-date')?.value;
+  const hrv  = parseInt(document.getElementById('goal-hrv')?.value, 10);
+  const name = document.getElementById('goal-race-name')?.value.trim() || '';
+  if (!date) { alert('Please enter a race date.'); return; }
+  if (!hrv || hrv < 1) { alert('Please enter a target HRV.'); return; }
+  if (RaceGoal.daysUntil(date) <= 0) { alert('Race date must be in the future.'); return; }
+  RaceGoal.save({ date, hrv, name });
+  renderRaceGoal();
+  renderChart(loadEntries().slice().sort((a, b) => a.date.localeCompare(b.date)));
+});
+
+document.getElementById('clear-race-goal-btn')?.addEventListener('click', () => {
+  RaceGoal.clear();
+  const dateEl = document.getElementById('goal-race-date');
+  const hrvEl  = document.getElementById('goal-hrv');
+  const nameEl = document.getElementById('goal-race-name');
+  if (dateEl) dateEl.value = '';
+  if (hrvEl)  hrvEl.value  = '';
+  if (nameEl) nameEl.value = '';
+  renderRaceGoal();
+  renderTrends();
+});
 
 // ── Connect tab ───────────────────────────────────────────────────────────────
 

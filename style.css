@@ -784,11 +784,125 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
 .preview-row .pr-detail { color: var(--text-muted); flex: 1; font-size: var(--fs-sm); }
 .preview-row .pr-hrv { color: var(--accent); font-weight: 700; }
 
+/* ── Race Goal Tracker ── */
+.race-goal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.race-goal-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.6fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.race-goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.race-goal-field label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.race-goal-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rg-separator {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0 14px;
+}
+
+.rg-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.rg-race-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  flex: 1;
+}
+.rg-days-badge {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.rg-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.rg-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 72px;
+}
+.rg-stat-val {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1;
+}
+.rg-stat-lbl {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.rg-stat-lbl em {
+  font-style: normal;
+  opacity: .75;
+}
+.rg-arrow {
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.rg-status {
+  border-radius: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 8px 12px;
+}
+.rg-status.on-track  { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.25); }
+.rg-status.off-track { background: rgba(248,113,113,.12); color: var(--red);  border: 1px solid rgba(248,113,113,.25); }
+
+.rg-hint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   .mood-row { grid-template-columns: 90px 1fr 24px; }
   .import-grid { grid-template-columns: 1fr; }
   .entry-metrics { gap: 10px; }
+  .race-goal-inputs { grid-template-columns: 1fr 1fr; }
+  .race-goal-name-field { grid-column: 1 / -1; }
 }
 
 /* ── Readiness score card ── */
