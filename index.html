@@ -30,6 +30,7 @@
       <button class="tab-btn" data-tab="trends">Trends</button>
       <button class="tab-btn" data-tab="insights">Insights</button>
       <button class="tab-btn" data-tab="connect">Connect</button>
+      <button class="tab-btn" data-tab="glossary">Glossary</button>
     </nav>
   </header>
 
@@ -478,6 +479,175 @@
       </div>
 
     </section>
+
+    <!-- GLOSSARY TAB -->
+    <section id="tab-glossary" class="tab">
+
+      <div class="glossary-intro">
+        A reference for every metric and feature in this app — what it means, how it's measured, and why it matters for endurance training.
+      </div>
+
+      <div class="section-label">Core Metrics</div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">HRV <span class="glossary-abbr">Heart Rate Variability</span></div>
+        <div class="glossary-def">
+          The millisecond-to-millisecond variation between consecutive heartbeats. A <strong>higher HRV</strong> means your autonomic nervous system is balanced and your body is well-recovered. A <strong>lower HRV</strong> — especially a sudden drop from your baseline — signals stress, fatigue, or incomplete recovery. Log it every morning, immediately after waking, before getting up.
+        </div>
+        <div class="glossary-tip">📲 Measure with any Garmin, Polar, WHOOP, or a chest strap + free app like EliteHRV.</div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Readiness Score</div>
+        <div class="glossary-def">
+          A 0–100 composite score calculated from your HRV relative to your rolling 7-day average, sleep hours, sleep quality, and any active flags (illness, stress, alcohol, travel). It's a single number to answer "how ready am I to train hard today?"
+          <ul class="glossary-scale">
+            <li><span class="rs-dot rs-green"></span><strong>80–100</strong> — Peak. Push it.</li>
+            <li><span class="rs-dot rs-ltgreen"></span><strong>65–79</strong> — Good. Normal training.</li>
+            <li><span class="rs-dot rs-yellow"></span><strong>50–64</strong> — Moderate. Keep intensity in check.</li>
+            <li><span class="rs-dot rs-orange"></span><strong>35–49</strong> — Low. Easy only.</li>
+            <li><span class="rs-dot rs-red"></span><strong>0–34</strong> — Rest. Your body needs it.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Body Battery</div>
+        <div class="glossary-def">
+          A Garmin metric (0–100) that estimates your energy reserves using HRV, stress, sleep, and activity data. It recharges during sleep and drains during activity and stress. Enter the value you see on your Garmin device each morning for a second data point alongside HRV.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Device Readiness</div>
+        <div class="glossary-def">
+          The readiness score reported directly by your wearable (e.g. Garmin Body Battery readiness, WHOOP Recovery, Oura Readiness). If your device gives you a readiness number, log it here — the app tracks it separately from the calculated Readiness Score so you can compare them over time.
+        </div>
+      </div>
+
+      <div class="section-label">Device Readings</div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Resting HR <span class="glossary-abbr">Resting Heart Rate</span></div>
+        <div class="glossary-def">
+          Beats per minute while fully at rest — ideally measured lying down before you get out of bed. A chronically elevated resting HR (more than ~5 bpm above your norm) is an early warning sign of over-training, illness, or poor sleep. Endurance athletes typically see 40–60 bpm; well-trained can go lower.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Resp. Rate <span class="glossary-abbr">Respiratory Rate</span></div>
+        <div class="glossary-def">
+          Breaths per minute during sleep, measured by most modern wearables. Normal range is 12–20 bpm. A spike of 2+ bpm above your baseline often precedes illness symptoms by 24–48 hours — it's one of the earliest physiological signs of infection or high systemic stress.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">SpO2 <span class="glossary-abbr">Blood Oxygen Saturation</span></div>
+        <div class="glossary-def">
+          The percentage of hemoglobin in your blood carrying oxygen. At sea level, healthy values are 95–100%. Values below 90% are clinically concerning. For athletes, SpO2 is most useful when training or sleeping at altitude — a significant drop signals your body is struggling to acclimatize.
+        </div>
+      </div>
+
+      <div class="section-label">Trends &amp; Analysis</div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">7-Day Rolling Average</div>
+        <div class="glossary-def">
+          Your mean HRV over the past 7 days. This is the baseline your Readiness Score is always measured against. Because HRV fluctuates day-to-day, the rolling average filters the noise and reveals the true trend — whether your fitness is building, holding, or declining.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Training Load</div>
+        <div class="glossary-def">
+          A 7-day rolling count of training sessions. High load + low HRV = accumulated fatigue warning. The Load chart on the Trends tab overlays session count against your HRV so you can see cause and effect over time.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Suppression Event</div>
+        <div class="glossary-def">
+          Triggered when your HRV drops more than 15% below your 7-day rolling average. This is a significant signal — not just day-to-day noise — that your body is under unusual stress. Suppression events are logged in the Insights tab so you can correlate them with training blocks, illness, or life stress.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Streaks</div>
+        <div class="glossary-def">
+          <strong>Log streak</strong> — consecutive days you've recorded an entry. Tracks habit consistency.<br>
+          <strong>Hot streak</strong> — consecutive days where your HRV was above your overall mean. A run of above-average readings means your body is adapting and recovering well.<br>
+          <strong>Best streak</strong> — your longest log streak ever. A personal record to chase.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Season Heatmap</div>
+        <div class="glossary-def">
+          A GitHub contribution-style grid covering the past 52 weeks. Each square is one day, colored by Readiness Score. Lets you spot patterns at a glance — taper windows (bright green before races), overreach blocks (red streaks), and recovery arcs across the whole season. Race days are outlined in gold.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Goal Race Tracker</div>
+        <div class="glossary-def">
+          Enter a target race date and a goal Readiness Score. The app fits a linear trend through all your HRV history and projects where you'll be on race day. If the projection falls short, you know you need to prioritize recovery. The projection updates automatically as you log more data.
+        </div>
+      </div>
+
+      <div class="section-label">Flags &amp; Context</div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Flags</div>
+        <div class="glossary-def">
+          One-tap markers that tag a day with a known stressor. Flagged days lower your Readiness Score calculation and are shown in the Suppression Log so you can separate training-caused HRV dips from life-caused ones.
+          <ul class="glossary-list">
+            <li>🤒 <strong>Illness</strong> — any active sickness</li>
+            <li>😰 <strong>High stress</strong> — work, personal, or emotional strain</li>
+            <li>🍺 <strong>Alcohol</strong> — even one drink measurably impacts HRV for 24–48 h</li>
+            <li>✈️ <strong>Travel</strong> — disrupted sleep, time zones, dehydration</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Sleep Quality</div>
+        <div class="glossary-def">
+          A 1–5 subjective rating of how rested you felt. Combined with sleep hours, it feeds the Readiness Score. Even 8 hours of poor-quality sleep contributes less to recovery than 7 hours of deep, uninterrupted sleep.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Feel &amp; Mood Sliders</div>
+        <div class="glossary-def">
+          Subjective check-ins for <strong>Energy</strong>, <strong>Stress</strong>, and <strong>Mood</strong> (each 1–5). Over time, the Insights tab correlates these with your objective HRV data — helping you spot, for example, whether high stress reliably tanks your HRV 48 hours later, or which activities consistently lift your mood score.
+        </div>
+      </div>
+
+      <div class="section-label">Integrations</div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Strava Sync</div>
+        <div class="glossary-def">
+          Connects to the Strava API using your own API credentials. When you log a day, the app checks Strava for workouts on that date and pre-fills the activity tags. Syncs automatically every 6 hours once connected.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Garmin Import</div>
+        <div class="glossary-def">
+          Import data from Garmin Connect CSV exports — either Activities or the full Health &amp; HRV export. Useful for backfilling weeks or months of historical data when you first set up the app.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Cloud Sync <span class="glossary-abbr">GitHub Gist</span></div>
+        <div class="glossary-def">
+          Uses a private GitHub Gist as a serverless cloud backup. Your data is encrypted in transit (HTTPS) and stored in your own GitHub account — no third-party servers. Set it up once per device with a GitHub Personal Access Token (gist scope only). Data merges automatically on each save and every 5 minutes.
+        </div>
+      </div>
+
+    </section>
+
   </main>
 
   <!-- Race confirmation modal -->
