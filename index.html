@@ -37,6 +37,8 @@
     <!-- LOG TAB -->
     <section id="tab-log" class="tab active">
       <form id="entry-form">
+
+        <!-- Date -->
         <div class="form-group">
           <label>Date</label>
           <div class="date-bar">
@@ -46,6 +48,9 @@
           </div>
           <div class="date-display" id="date-display"></div>
         </div>
+
+        <!-- ── Morning Report ──────────────────────────────── -->
+        <div class="form-section-label">🌅 Morning Report</div>
 
         <div class="form-group">
           <label for="hrv">HRV <span class="unit">(ms)</span></label>
@@ -57,23 +62,20 @@
         <div id="training-context" class="training-context hidden"></div>
 
         <div class="form-group">
-          <label>How do you feel today?</label>
-          <div class="feel-tap-row" id="feel-tap-row">
-            <button type="button" class="feel-btn" data-value="4">😄 Great</button>
-            <button type="button" class="feel-btn" data-value="3">🙂 Good</button>
-            <button type="button" class="feel-btn" data-value="2">😐 Average</button>
-            <button type="button" class="feel-btn" data-value="1">😓 Rough</button>
-          </div>
-          <input type="hidden" id="feel-today" value="" />
-        </div>
-
-        <div class="form-group">
-          <label>Flags <span class="unit">(optional)</span></label>
-          <div class="flag-row" id="flag-row">
-            <label class="flag-btn"><input type="checkbox" id="flag-illness" value="illness" /><span>🤒 Illness</span></label>
-            <label class="flag-btn"><input type="checkbox" id="flag-stress" value="stress" /><span>😰 High stress</span></label>
-            <label class="flag-btn"><input type="checkbox" id="flag-alcohol" value="alcohol" /><span>🍺 Alcohol</span></label>
-            <label class="flag-btn"><input type="checkbox" id="flag-travel" value="travel" /><span>✈️ Travel</span></label>
+          <label>Recovery <span class="unit">(optional)</span></label>
+          <div class="metrics-grid metrics-grid-2">
+            <div class="metric-card">
+              <span class="metric-card-icon">🔋</span>
+              <input type="number" id="body-battery" min="0" max="100" placeholder="—" />
+              <span class="metric-card-unit">/100</span>
+              <span class="metric-card-label">Body Battery</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-card-icon">⚡</span>
+              <input type="number" id="readiness" min="0" max="100" placeholder="—" />
+              <span class="metric-card-unit">/100</span>
+              <span class="metric-card-label">Device Readiness</span>
+            </div>
           </div>
         </div>
 
@@ -99,6 +101,19 @@
           </div>
         </div>
 
+        <!-- How do you feel today -->
+        <div class="form-group">
+          <label>How do you feel today?</label>
+          <div class="feel-tap-row" id="feel-tap-row">
+            <button type="button" class="feel-btn" data-value="4">😄 Great</button>
+            <button type="button" class="feel-btn" data-value="3">🙂 Good</button>
+            <button type="button" class="feel-btn" data-value="2">😐 Average</button>
+            <button type="button" class="feel-btn" data-value="1">😓 Rough</button>
+          </div>
+          <input type="hidden" id="feel-today" value="" />
+        </div>
+
+        <!-- ── Device Readings ─────────────────────────────── -->
         <div class="form-group">
           <label>Device readings <span class="unit">(optional)</span></label>
           <div class="metrics-grid">
@@ -107,12 +122,6 @@
               <input type="number" id="resting-hr" min="30" max="220" placeholder="—" />
               <span class="metric-card-unit">bpm</span>
               <span class="metric-card-label">Resting HR</span>
-            </div>
-            <div class="metric-card">
-              <span class="metric-card-icon">⚡</span>
-              <input type="number" id="readiness" min="0" max="100" placeholder="—" />
-              <span class="metric-card-unit">/100</span>
-              <span class="metric-card-label">Device Readiness</span>
             </div>
             <div class="metric-card">
               <span class="metric-card-icon">🌬️</span>
@@ -126,15 +135,21 @@
               <span class="metric-card-unit">%</span>
               <span class="metric-card-label">SpO2</span>
             </div>
-            <div class="metric-card">
-              <span class="metric-card-icon">🔋</span>
-              <input type="number" id="body-battery" min="0" max="100" placeholder="—" />
-              <span class="metric-card-unit">/100</span>
-              <span class="metric-card-label">Body Battery</span>
-            </div>
           </div>
         </div>
 
+        <!-- Flags -->
+        <div class="form-group">
+          <label>Flags <span class="unit">(optional)</span></label>
+          <div class="flag-row" id="flag-row">
+            <label class="flag-btn"><input type="checkbox" id="flag-illness" value="illness" /><span>🤒 Illness</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-stress" value="stress" /><span>😰 High stress</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-alcohol" value="alcohol" /><span>🍺 Alcohol</span></label>
+            <label class="flag-btn"><input type="checkbox" id="flag-travel" value="travel" /><span>✈️ Travel</span></label>
+          </div>
+        </div>
+
+        <!-- How did you feel (sliders) -->
         <div class="form-group">
           <label>How did you feel?</label>
           <div class="mood-grid">
@@ -156,6 +171,7 @@
           </div>
         </div>
 
+        <!-- Activities -->
         <div class="form-group">
           <div class="label-row">
             <label>Activities</label>
@@ -178,6 +194,7 @@
           <div id="strava-import-msg" class="import-msg hidden"></div>
         </div>
 
+        <!-- Notes -->
         <div class="form-group">
           <label for="notes">Notes <span class="unit">(optional)</span></label>
           <textarea id="notes" rows="3" placeholder="Anything else worth noting — nutrition, travel, illness, etc."></textarea>

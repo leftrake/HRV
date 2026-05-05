@@ -366,11 +366,37 @@ input[type="range"]::-moz-range-thumb {
 /* Sync row */
 .sync-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 
+/* ── Form section dividers ── */
+.form-section-label {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 18px 0 10px;
+  padding-left: 10px;
+  position: relative;
+}
+.form-section-label::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 /* ── Device metrics grid ── */
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+}
+.metrics-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .metric-card {
