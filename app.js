@@ -1719,6 +1719,10 @@ function renderHeatmap() {
   const tooltip = document.getElementById('hm-tooltip');
   if (!tooltip) return;
 
+  // Scroll to the right end so the most recent weeks are visible
+  const scrollEl = grid.closest('.heatmap-scroll');
+  if (scrollEl) requestAnimationFrame(() => { scrollEl.scrollLeft = scrollEl.scrollWidth; });
+
   grid.addEventListener('mouseover', e => {
     const cell = e.target.closest('.hm-cell');
     if (!cell) return;

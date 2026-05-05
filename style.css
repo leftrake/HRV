@@ -1361,13 +1361,21 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
 .heatmap-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+  overscroll-behavior-x: contain;
+  padding-bottom: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: grab;
 }
+.heatmap-scroll:active { cursor: grabbing; }
+.heatmap-scroll::-webkit-scrollbar { height: 4px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: var(--surface2); border-radius: 2px; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+.heatmap-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
-.heatmap-inner {
+.heatmap-body {
   display: flex;
   gap: 6px;
-  min-width: max-content;
   align-items: flex-end;
 }
 
@@ -1387,7 +1395,7 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
   text-align: right;
 }
 
-.hm-main { display: flex; flex-direction: column; gap: 4px; }
+.hm-main { display: flex; flex-direction: column; gap: 4px; min-width: max-content; }
 
 .hm-months {
   height: 16px;
