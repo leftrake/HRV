@@ -651,6 +651,28 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
 .stat-value { font-size: var(--fs-3xl); font-weight: 700; line-height: 1; margin-bottom: 4px; }
 .stat-label { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
 
+/* ── Streaks ── */
+.streaks-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.streak-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.streak-icon { font-size: var(--fs-xl); line-height: 1; margin-bottom: 2px; }
+.streak-val  { font-size: var(--fs-3xl); font-weight: 700; line-height: 1; }
+.streak-label { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
 /* ── Connect tab ── */
 .connect-card {
   background: var(--surface);

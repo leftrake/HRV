@@ -225,6 +225,51 @@ const RaceGoal = {
   },
 };
 
+// ── Streak tracking ───────────────────────────────────────────────────────────
+
+const Streaks = {
+  _addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return localDateStr(d);
+  },
+
+  compute(allEntries) {
+    if (!allEntries.length) return { log: 0, hot: 0, best: 0 };
+
+    const sorted   = allEntries.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const dateSet  = new Set(sorted.map(e => e.date));
+    const entryMap = new Map(sorted.map(e => [e.date, e]));
+    const overall  = sorted.reduce((s, e) => s + e.hrv, 0) / sorted.length;
+
+    // Current log streak — walk back from today or yesterday
+    let log = 0;
+    const t = todayStr(), y = yesterdayStr();
+    let cur = dateSet.has(t) ? t : dateSet.has(y) ? y : null;
+    while (cur && dateSet.has(cur)) { log++; cur = this._addDays(cur, -1); }
+
+    // Longest ever log streak
+    let best = 0, run = 0, prev = null;
+    for (const e of sorted) {
+      run = (prev && this._addDays(prev, 1) === e.date) ? run + 1 : 1;
+      if (run > best) best = run;
+      prev = e.date;
+    }
+    // Include current streak in best
+    if (log > best) best = log;
+
+    // Above-baseline streak — consecutive logged days ending now where hrv >= overall mean
+    let hot = 0;
+    cur = dateSet.has(t) ? t : dateSet.has(y) ? y : null;
+    while (cur && entryMap.has(cur)) {
+      if (entryMap.get(cur).hrv >= overall) { hot++; cur = this._addDays(cur, -1); }
+      else break;
+    }
+
+    return { log, hot, best };
+  },
+};
+
 // ── Strava sync ───────────────────────────────────────────────────────────────
 
 const StravaSync = {
@@ -1524,10 +1569,29 @@ function renderTrends() {
     entries = entries.filter(en => en.date >= cs);
   }
   renderStats(entries);
+  renderStreaks();
   renderChart(entries);
   renderRaceGoal();
   renderLoadChart(days);
   renderInsights();
+}
+
+function renderStreaks() {
+  const el = document.getElementById('streaks-row');
+  if (!el) return;
+  const { log, hot, best } = Streaks.compute(loadEntries());
+
+  const card = (icon, value, label, color) =>
+    `<div class="streak-card">
+      <div class="streak-icon">${icon}</div>
+      <div class="streak-val" style="color:${color}">${value}</div>
+      <div class="streak-label">${label}</div>
+     </div>`;
+
+  el.innerHTML =
+    card('🔥', log,  `Day${log  !== 1 ? 's' : ''} logged`,    log  > 0 ? 'var(--accent)' : 'var(--text-muted)') +
+    card('⚡', hot,  `Above baseline`,                          hot  > 0 ? 'var(--green)'  : 'var(--text-muted)') +
+    card('🏆', best, `Best ever`,                               best > 0 ? 'var(--yellow)'  : 'var(--text-muted)');
 }
 
 function renderStats(entries) {
