@@ -1570,10 +1570,128 @@ function renderTrends() {
   }
   renderStats(entries);
   renderStreaks();
+  renderHeatmap();
   renderChart(entries);
   renderRaceGoal();
   renderLoadChart(days);
   renderInsights();
+}
+
+// ── Season Heatmap ────────────────────────────────────────────────────────────
+
+function hmColor(rs) {
+  if (rs >= 80) return '#34d399';
+  if (rs >= 65) return 'rgba(52,211,153,.58)';
+  if (rs >= 50) return 'rgba(251,191,36,.75)';
+  if (rs >= 35) return 'rgba(248,113,113,.72)';
+  return 'rgba(220,38,38,.85)';
+}
+
+function renderHeatmap() {
+  const grid = document.getElementById('hm-grid');
+  const monthsEl = document.getElementById('hm-months');
+  if (!grid) return;
+
+  const allEntries = loadEntries();
+  const entryMap  = new Map(allEntries.map(e => [e.date, e]));
+  const raceDates = new Set(loadActivities().filter(a => a.isRace).map(a => a.date));
+  const avgHrv    = allEntries.length
+    ? allEntries.reduce((s, e) => s + e.hrv, 0) / allEntries.length : 60;
+
+  // 52 full weeks ending today, starting on Monday
+  const today    = new Date(); today.setHours(12, 0, 0, 0);
+  const todayStr = localDateStr(today);
+  const todayDow = (today.getDay() + 6) % 7; // 0=Mon
+  const start    = new Date(today);
+  start.setDate(today.getDate() - todayDow - 51 * 7);
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthLabels = [];
+  let lastMonth = -1, weekIdx = 0;
+
+  grid.innerHTML = '';
+
+  const cur = new Date(start);
+  while (localDateStr(cur) <= todayStr) {
+    const dow     = (cur.getDay() + 6) % 7;
+    const dateStr = localDateStr(cur);
+
+    if (dow === 0) {
+      const m = cur.getMonth();
+      if (m !== lastMonth) { monthLabels.push({ weekIdx, label: MONTHS[m] }); lastMonth = m; }
+    }
+
+    const entry = entryMap.get(dateStr);
+    const cell  = document.createElement('div');
+    cell.className    = 'hm-cell';
+    cell.dataset.date = dateStr;
+
+    if (entry) {
+      const rs = entry.readinessScore
+        ?? Math.min(100, Math.max(0, 50 + (entry.hrv - avgHrv) / avgHrv * 50));
+      cell.style.background = hmColor(rs);
+      cell.dataset.hrv = entry.hrv;
+      cell.dataset.rs  = Math.round(rs);
+      if (raceDates.has(dateStr)) cell.classList.add('hm-race');
+    }
+
+    grid.appendChild(cell);
+    if (dow === 6) weekIdx++;
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // Month labels — positioned by pixel offset
+  if (monthsEl) {
+    monthsEl.innerHTML = '';
+    const CELL = 13, GAP = 3;
+    monthLabels.forEach(({ weekIdx: wi, label }) => {
+      const span = document.createElement('span');
+      span.textContent = label;
+      span.style.left  = `${wi * (CELL + GAP)}px`;
+      monthsEl.appendChild(span);
+    });
+  }
+
+  // Tooltip (event delegation)
+  const tooltip = document.getElementById('hm-tooltip');
+  if (!tooltip) return;
+
+  grid.addEventListener('mouseover', e => {
+    const cell = e.target.closest('.hm-cell');
+    if (!cell) return;
+    showHmTooltip(tooltip, cell);
+  });
+  grid.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+
+  grid.addEventListener('touchstart', e => {
+    const cell = e.changedTouches[0]
+      ? document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY)?.closest('.hm-cell')
+      : null;
+    if (!cell) return;
+    e.preventDefault();
+    showHmTooltip(tooltip, cell);
+    setTimeout(() => tooltip.classList.add('hidden'), 2500);
+  }, { passive: false });
+}
+
+function showHmTooltip(tooltip, cell) {
+  const dateStr = cell.dataset.date;
+  if (!dateStr) return;
+  const d = new Date(dateStr + 'T12:00:00');
+  const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  let html = `<div class="hmt-date">${label}</div>`;
+  if (cell.dataset.hrv) {
+    html += `<div class="hmt-row">HRV <strong>${cell.dataset.hrv} ms</strong></div>`;
+    html += `<div class="hmt-row">Readiness <strong>${cell.dataset.rs}</strong></div>`;
+    if (cell.classList.contains('hm-race')) html += `<div class="hmt-row">🏁 Race day</div>`;
+  } else {
+    html += `<div class="hmt-row hmt-muted">No entry</div>`;
+  }
+  tooltip.innerHTML = html;
+  tooltip.classList.remove('hidden');
+  const r = cell.getBoundingClientRect();
+  tooltip.style.left = `${r.left + r.width / 2}px`;
+  tooltip.style.top  = `${r.top - 6}px`;
 }
 
 function renderStreaks() {

@@ -222,6 +222,43 @@
       <div class="section-label">Streaks</div>
       <div class="streaks-row" id="streaks-row"></div>
 
+      <div class="section-label">Season Heatmap</div>
+      <div class="heatmap-wrap">
+        <div class="heatmap-scroll">
+          <div class="heatmap-inner">
+            <div class="hm-days-col">
+              <span></span>
+              <span>Mon</span>
+              <span></span>
+              <span>Wed</span>
+              <span></span>
+              <span>Fri</span>
+              <span></span>
+            </div>
+            <div class="hm-main">
+              <div class="hm-months" id="hm-months"></div>
+              <div class="hm-grid" id="hm-grid"></div>
+            </div>
+          </div>
+        </div>
+        <div class="hm-footer">
+          <div class="hm-legend">
+            <span>Less</span>
+            <div class="hm-legend-cells">
+              <div class="hm-legend-cell" style="background:var(--surface2)"></div>
+              <div class="hm-legend-cell" style="background:rgba(220,38,38,.85)"></div>
+              <div class="hm-legend-cell" style="background:rgba(248,113,113,.72)"></div>
+              <div class="hm-legend-cell" style="background:rgba(251,191,36,.75)"></div>
+              <div class="hm-legend-cell" style="background:rgba(52,211,153,.58)"></div>
+              <div class="hm-legend-cell" style="background:#34d399"></div>
+            </div>
+            <span>More</span>
+            <span class="hm-legend-sep"></span>
+            <span class="hm-legend-race">🏁 Race day</span>
+          </div>
+        </div>
+      </div>
+
       <div class="section-label">Goal Race Tracker</div>
       <div class="race-goal-card">
         <div class="race-goal-inputs">
@@ -450,6 +487,7 @@
     </div>
   </div>
 
+  <div id="hm-tooltip" class="hm-tooltip hidden"></div>
   <script src="app.js"></script>
 </body>
 </html>
