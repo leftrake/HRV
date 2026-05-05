@@ -112,7 +112,12 @@ const GistSync = {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
+    if (res.status === 401) {
+      localStorage.setItem('gist_token_invalid', '1');
+      throw new Error('token_expired');
+    }
     if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    localStorage.removeItem('gist_token_invalid');
     return res.json();
   },
 
@@ -2567,23 +2572,28 @@ function fmtSyncTime(ts) {
 
 function updateGistUI() {
   const configured  = GistSync.isConfigured();
+  const tokenBad    = !!localStorage.getItem('gist_token_invalid');
   const setupEl     = document.getElementById('gist-setup-form');
   const connectedEl = document.getElementById('gist-connected-view');
   const dot         = document.getElementById('gist-status-dot');
   if (!setupEl || !connectedEl) return;
 
-  if (configured) {
+  if (configured && !tokenBad) {
     setupEl.classList.add('hidden');
     connectedEl.classList.remove('hidden');
     if (dot) { dot.className = 'status-dot connected'; dot.title = 'Connected'; }
     const lastEl = document.getElementById('gist-last-sync');
     if (lastEl) lastEl.textContent = fmtSyncTime(localStorage.getItem(GistSync.LAST_SYNC_KEY));
+    setGistMsg('');
   } else {
     setupEl.classList.remove('hidden');
     connectedEl.classList.add('hidden');
-    if (dot) { dot.className = 'status-dot disconnected'; dot.title = 'Not connected'; }
+    if (dot) { dot.className = 'status-dot disconnected'; dot.title = tokenBad ? 'Token expired' : 'Not connected'; }
     const tokenEl = document.getElementById('gist-token');
-    if (tokenEl) tokenEl.value = GistSync.getToken();
+    if (tokenEl) tokenEl.value = '';
+    if (tokenBad) {
+      setGistMsg('Your GitHub token has expired. Generate a new one and reconnect — your local data is safe.', 'error');
+    }
   }
 }
 
@@ -2617,6 +2627,7 @@ document.getElementById('gist-connect-btn')?.addEventListener('click', async () 
 
     localStorage.setItem(GistSync.TOKEN_KEY,   token);
     localStorage.setItem(GistSync.GIST_ID_KEY, gistId);
+    localStorage.removeItem('gist_token_invalid');
 
     setGistMsg('Syncing data…');
     await GistSync.sync();
