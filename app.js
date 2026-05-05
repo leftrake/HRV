@@ -427,6 +427,68 @@ const TrainingLoad = {
   },
 };
 
+// ── Taper Detection ───────────────────────────────────────────────────────────
+
+const TaperDetector = {
+  MIN_DROP_DAYS: 3,
+
+  detect(activities) {
+    const today = todayStr();
+    const s = new Date(); s.setDate(s.getDate() - 90);
+    const start = localDateStr(s);
+    const series = TrainingLoad.compute(activities, start, today);
+    const dates  = Object.keys(series).sort();
+    if (dates.length < 4) return null;
+
+    const todayData = series[today];
+    // TSB must be positive (form > fatigue)
+    if (!todayData || todayData.tsb <= 0) return null;
+
+    // ATL must have been dropping for MIN_DROP_DAYS consecutive days ending today
+    let dropDays = 0;
+    for (let i = dates.length - 1; i > 0; i--) {
+      if (series[dates[i]].atl < series[dates[i - 1]].atl) dropDays++;
+      else break;
+    }
+    if (dropDays < this.MIN_DROP_DAYS) return null;
+
+    // Find start of this taper run: earliest consecutive day where TSB was positive
+    let taperStart = today;
+    for (let i = dates.length - 2; i >= 0; i--) {
+      if (series[dates[i]].tsb > 0) taperStart = dates[i];
+      else break;
+    }
+
+    const startMs   = new Date(taperStart + 'T12:00:00').getTime();
+    const todayMs   = new Date(today       + 'T12:00:00').getTime();
+    const dayCount  = Math.round((todayMs - startMs) / 86400000) + 1;
+
+    // Find next upcoming race: confirmed activities first, then RaceGoal
+    const upcoming = activities
+      .filter(a => a.isRace && a.raceConfirmed && a.date > today)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    let nextRace = null;
+    if (upcoming.length) {
+      const r = upcoming[0];
+      const daysToRace = Math.round(
+        (new Date(r.date + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000
+      );
+      nextRace = { date: r.date, name: r.name || 'Race', daysToRace };
+    } else {
+      const goal = RaceGoal.load();
+      if (goal?.date > today) {
+        const daysToRace = Math.round(
+          (new Date(goal.date + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000
+        );
+        nextRace = { date: goal.date, name: goal.name || 'Goal Race', daysToRace };
+      }
+    }
+
+    return { startDate: taperStart, dayCount, tsb: todayData.tsb, nextRace };
+  },
+};
+
 // ── Recovery analytics ────────────────────────────────────────────────────────
 
 const RecoveryAnalytics = {
@@ -1569,6 +1631,7 @@ function renderTrends() {
     entries = entries.filter(en => en.date >= cs);
   }
   renderStats(entries);
+  renderTaperBanner();
   renderStreaks();
   renderHeatmap();
   renderChart(entries);
@@ -1692,6 +1755,30 @@ function showHmTooltip(tooltip, cell) {
   const r = cell.getBoundingClientRect();
   tooltip.style.left = `${r.left + r.width / 2}px`;
   tooltip.style.top  = `${r.top - 6}px`;
+}
+
+function renderTaperBanner() {
+  const el = document.getElementById('taper-banner');
+  if (!el) return;
+  const taper = TaperDetector.detect(loadActivities());
+  if (!taper) { el.innerHTML = ''; return; }
+
+  const raceHtml = taper.nextRace
+    ? `<div class="taper-race">🏁 ${taper.nextRace.name} in <strong>${taper.nextRace.daysToRace}</strong> day${taper.nextRace.daysToRace !== 1 ? 's' : ''}</div>`
+    : `<div class="taper-race taper-race-hint">Add a goal race to see your countdown →</div>`;
+
+  el.innerHTML = `
+    <div class="taper-card">
+      <div class="taper-header">
+        <span class="taper-pill">TAPER</span>
+        <span class="taper-day">Day ${taper.dayCount}</span>
+        <span class="taper-tsb">Form +${taper.tsb.toFixed(1)}</span>
+      </div>
+      <div class="taper-body">
+        Load has been dropping for ${taper.dayCount + 2}+ days and your form score is positive — classic taper signal. Keep intensity sharp, volume low.
+      </div>
+      ${raceHtml}
+    </div>`;
 }
 
 function renderStreaks() {

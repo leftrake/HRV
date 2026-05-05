@@ -237,6 +237,8 @@
       </div>
       <div class="stats-grid" id="stats-grid"></div>
 
+      <div id="taper-banner"></div>
+
       <div class="section-label">Streaks</div>
       <div class="streaks-row" id="streaks-row"></div>
 
@@ -584,6 +586,20 @@
         <div class="glossary-term">Season Heatmap</div>
         <div class="glossary-def">
           A GitHub contribution-style grid covering the past 52 weeks. Each square is one day, colored by Readiness Score. Lets you spot patterns at a glance — taper windows (bright green before races), overreach blocks (red streaks), and recovery arcs across the whole season. Race days are outlined in gold.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Taper Detection</div>
+        <div class="glossary-def">
+          Automatically detects when you're in a taper by watching two signals simultaneously: your training load (ATL) must have been declining for 3 or more consecutive days, <em>and</em> your TSB (form score = fitness minus fatigue) must be positive. When both are true, a banner appears showing which day of the taper you're on, your current form score, and a countdown to your next logged race or goal race date.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">TSB <span class="glossary-abbr">Training Stress Balance / Form</span></div>
+        <div class="glossary-def">
+          TSB = CTL − ATL (Fitness minus Fatigue). A positive TSB means you're fresher than your long-term fitness level — the classic "form" signal. A deeply negative TSB means accumulated fatigue is outpacing fitness gains. Taper windows target a TSB of roughly +5 to +20 on race day: fresh enough to perform, not so rested that sharpness fades.
         </div>
       </div>
 

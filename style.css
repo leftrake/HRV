@@ -1569,3 +1569,72 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
 .glossary-list li strong {
   color: var(--text);
 }
+
+/* ── Taper Banner ── */
+#taper-banner { margin-bottom: 4px; }
+
+.taper-card {
+  background: linear-gradient(135deg, rgba(52,211,153,.12) 0%, rgba(91,141,238,.1) 100%);
+  border: 1px solid rgba(52,211,153,.35);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.taper-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.taper-pill {
+  background: var(--green);
+  color: #0b1a14;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.taper-day {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--green);
+}
+
+.taper-tsb {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.taper-body {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+
+.taper-race {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(251,191,36,.12);
+  border: 1px solid rgba(251,191,36,.3);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  display: inline-block;
+}
+
+.taper-race strong { color: var(--yellow); }
+
+.taper-race-hint {
+  font-weight: 400;
+  color: var(--text-muted);
+  background: var(--surface2);
+  border-color: var(--border);
+  cursor: pointer;
+}
