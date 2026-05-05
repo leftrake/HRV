@@ -485,7 +485,7 @@ const TaperDetector = {
       }
     }
 
-    return { startDate: taperStart, dayCount, tsb: todayData.tsb, nextRace };
+    return { startDate: taperStart, dayCount, dropDays, tsb: todayData.tsb, nextRace };
   },
 };
 
@@ -797,10 +797,9 @@ const ReadinessScore = {
       const dev = (entry.hrv - b.baseline) / Math.max(b.stdDev, 1);
       hrvScore = Math.max(0, Math.min(100, 50 + dev * 25));
     }
-    // 3-day trend
+    // 3-day trend — filter before entry.date so this works even for unsaved entries
     const sorted = [...entries].sort((a,b)=>a.date.localeCompare(b.date));
-    const idx = sorted.findIndex(e=>e.date===entry.date);
-    const recent = sorted.slice(Math.max(0,idx-3),idx).map(e=>e.hrv).filter(Boolean);
+    const recent = sorted.filter(e => e.date < entry.date).slice(-3).map(e=>e.hrv).filter(Boolean);
     let trendScore = 50;
     if (recent.length >= 2) {
       const chg = (recent.at(-1) - recent[0]) / recent[0] * 100;
@@ -818,9 +817,13 @@ const ReadinessScore = {
     const feelMap = {4: 100, 3: 70, 2: 45, 1: 15};
     const subjectiveScore = entry.feelToday ? (feelMap[entry.feelToday] ?? 50) : (entry.mood / 10) * 100;
     const W = this.WEIGHTS;
-    const score = Math.round(Math.max(0, Math.min(100,
-      hrvScore * W.hrv + trendScore * W.trend + sleepScore * W.sleep + subjectiveScore * W.subjective
-    )));
+    const baseScore =
+      hrvScore * W.hrv + trendScore * W.trend + sleepScore * W.sleep + subjectiveScore * W.subjective;
+    // Apply flag penalties: illness -15, others -8 each
+    const flags = entry.flags || [];
+    const flagPenalty = (flags.includes('illness') ? 15 : 0)
+      + flags.filter(f => f !== 'illness').length * 8;
+    const score = Math.round(Math.max(0, Math.min(100, baseScore - flagPenalty)));
     return {
       score,
       inputs: { hrvScore: +hrvScore.toFixed(1), trendScore: +trendScore.toFixed(1), sleepScore: +sleepScore.toFixed(1), subjectiveScore: +subjectiveScore.toFixed(1), weights: {...W}, baseline: b },
@@ -1715,13 +1718,16 @@ function renderHeatmap() {
     });
   }
 
-  // Tooltip (event delegation)
-  const tooltip = document.getElementById('hm-tooltip');
-  if (!tooltip) return;
-
   // Scroll to the right end so the most recent weeks are visible
   const scrollEl = grid.closest('.heatmap-scroll');
   if (scrollEl) requestAnimationFrame(() => { scrollEl.scrollLeft = scrollEl.scrollWidth; });
+}
+
+// Heatmap tooltip listeners — registered once at startup, delegated to current cells
+(function initHeatmapListeners() {
+  const grid    = document.getElementById('hm-grid');
+  const tooltip = document.getElementById('hm-tooltip');
+  if (!grid || !tooltip) return;
 
   grid.addEventListener('mouseover', e => {
     const cell = e.target.closest('.hm-cell');
@@ -1739,7 +1745,7 @@ function renderHeatmap() {
     showHmTooltip(tooltip, cell);
     setTimeout(() => tooltip.classList.add('hidden'), 2500);
   }, { passive: false });
-}
+})();
 
 function showHmTooltip(tooltip, cell) {
   const dateStr = cell.dataset.date;
@@ -1779,7 +1785,7 @@ function renderTaperBanner() {
         <span class="taper-tsb">Form +${taper.tsb.toFixed(1)}</span>
       </div>
       <div class="taper-body">
-        Load has been dropping for ${taper.dayCount + 2}+ days and your form score is positive — classic taper signal. Keep intensity sharp, volume low.
+        Load has been dropping for ${taper.dropDays} consecutive day${taper.dropDays !== 1 ? 's' : ''} and your form score is positive — classic taper signal. Keep intensity sharp, volume low.
       </div>
       ${raceHtml}
     </div>`;
