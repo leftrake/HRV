@@ -489,6 +489,132 @@ const TaperDetector = {
   },
 };
 
+// ── WeatherService ────────────────────────────────────────────────────────────
+// Uses Open-Meteo (free, no key required) for historical + forecast weather.
+
+const WeatherService = {
+  LAT_KEY:   'wx_lat',
+  LON_KEY:   'wx_lon',
+  CACHE_KEY: 'wx_cache',
+  ELEV_KEY:  'wx_elevation',
+
+  getCoords() {
+    const lat = parseFloat(localStorage.getItem(this.LAT_KEY));
+    const lon = parseFloat(localStorage.getItem(this.LON_KEY));
+    return (!isNaN(lat) && !isNaN(lon)) ? { lat, lon } : null;
+  },
+
+  saveCoords(lat, lon) {
+    localStorage.setItem(this.LAT_KEY, lat.toFixed(4));
+    localStorage.setItem(this.LON_KEY, lon.toFixed(4));
+    localStorage.removeItem(this.ELEV_KEY);
+  },
+
+  clear() {
+    [this.LAT_KEY, this.LON_KEY, this.ELEV_KEY].forEach(k => localStorage.removeItem(k));
+  },
+
+  _cacheGet(date) {
+    try { return JSON.parse(localStorage.getItem(this.CACHE_KEY) || '{}')[date] ?? null; }
+    catch { return null; }
+  },
+
+  _cacheSet(date, data) {
+    try {
+      const c = JSON.parse(localStorage.getItem(this.CACHE_KEY) || '{}');
+      c[date] = data;
+      const keys = Object.keys(c).sort();
+      if (keys.length > 400) keys.slice(0, keys.length - 400).forEach(k => delete c[k]);
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(c));
+    } catch {}
+  },
+
+  async fetch(date, lat, lon) {
+    const hit = this._cacheGet(date);
+    if (hit) return hit;
+
+    const isPast = date < todayStr();
+    const base   = isPast
+      ? 'https://archive-api.open-meteo.com/v1/archive'
+      : 'https://api.open-meteo.com/v1/forecast';
+
+    const params = new URLSearchParams({
+      latitude:   lat.toFixed(4),
+      longitude:  lon.toFixed(4),
+      start_date: date,
+      end_date:   date,
+      daily:      'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max',
+      hourly:     'relativehumidity_2m',
+      timezone:   'auto',
+    });
+
+    const res = await fetch(`${base}?${params}`);
+    if (!res.ok) throw new Error(`Weather API ${res.status}`);
+    const j = await res.json();
+
+    // Morning humidity average (hours 6–10)
+    const humHours = j.hourly?.relativehumidity_2m?.slice(6, 10) ?? [];
+    const humidity = humHours.length
+      ? Math.round(humHours.reduce((s, v) => s + v, 0) / humHours.length)
+      : null;
+
+    const data = {
+      tempMaxC: j.daily?.temperature_2m_max?.[0]  ?? null,
+      tempMinC: j.daily?.temperature_2m_min?.[0]  ?? null,
+      precipMM: j.daily?.precipitation_sum?.[0]   ?? null,
+      windKph:  j.daily?.windspeed_10m_max?.[0]   ?? null,
+      humidity,
+    };
+
+    if (isPast) this._cacheSet(date, data);
+    return data;
+  },
+
+  async fetchElevation(lat, lon) {
+    const cached = localStorage.getItem(this.ELEV_KEY);
+    if (cached !== null) return +cached;
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/elevation?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`
+    );
+    if (!res.ok) return null;
+    const j    = await res.json();
+    const elev = j.elevation?.[0] ?? null;
+    if (elev != null) localStorage.setItem(this.ELEV_KEY, String(elev));
+    return elev;
+  },
+
+  requestLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation not supported by this browser'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          this.saveCoords(pos.coords.latitude, pos.coords.longitude);
+          resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        },
+        err => reject(new Error(err.message || 'Location access denied')),
+        { timeout: 10000 }
+      );
+    });
+  },
+
+  // Fetch weather for all entries that don't have it yet; saves mutated entries array
+  async backfill(entries, onProgress) {
+    const coords = this.getCoords();
+    if (!coords) return 0;
+    const missing = entries.filter(e => e.hrv && !e.weather);
+    let count = 0;
+    for (const e of missing) {
+      try { e.weather = await this.fetch(e.date, coords.lat, coords.lon); count++; } catch {}
+      onProgress?.(count, missing.length);
+      if (count % 10 === 0) await new Promise(r => setTimeout(r, 100));
+    }
+    return count;
+  },
+};
+
 // ── Recovery analytics ────────────────────────────────────────────────────────
 
 const RecoveryAnalytics = {
@@ -1097,10 +1223,53 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     if (btn.dataset.tab === 'history')  { renderHistory(); checkSuppressionBanner(); }
     if (btn.dataset.tab === 'trends')   renderTrends();
-    if (btn.dataset.tab === 'connect')  updateStravaUI();
+    if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); }
     if (btn.dataset.tab === 'insights') renderInsightsTab();
   });
 });
+
+// ── Weather strip (Log form) ──────────────────────────────────────────────────
+
+let _pendingWeather = null;
+
+function wxIcon(wx) {
+  if (!wx) return '🌤';
+  if ((wx.precipMM ?? 0) > 1)   return '🌧';
+  if ((wx.tempMaxC ?? 20) > 32) return '🔥';
+  if ((wx.tempMaxC ?? 20) > 22) return '☀️';
+  if ((wx.tempMaxC ?? 20) < 5)  return '🥶';
+  return '🌤';
+}
+
+function showWeatherStrip(wx) {
+  const strip = document.getElementById('weather-strip');
+  if (!strip) return;
+  if (!wx) { strip.classList.add('hidden'); return; }
+  const parts = [];
+  if (wx.tempMaxC != null) parts.push(`<strong>${Math.round(wx.tempMaxC)}°C</strong>`);
+  if (wx.humidity  != null) parts.push(`${wx.humidity}% RH`);
+  if ((wx.precipMM ?? 0) > 0.1) parts.push(`${wx.precipMM.toFixed(1)} mm rain`);
+  if ((wx.windKph  ?? 0) > 20)  parts.push(`${Math.round(wx.windKph)} km/h wind`);
+  strip.innerHTML = `<span class="wx-icon">${wxIcon(wx)}</span> ${parts.join(' · ')}`;
+  strip.classList.remove('hidden');
+}
+
+async function updateWeatherStrip(date) {
+  const strip = document.getElementById('weather-strip');
+  if (!strip) return;
+  _pendingWeather = null;
+  const coords = WeatherService.getCoords();
+  if (!coords) { strip.classList.add('hidden'); return; }
+  strip.innerHTML = '<span class="wx-loading">…</span>';
+  strip.classList.remove('hidden');
+  try {
+    const wx    = await WeatherService.fetch(date, coords.lat, coords.lon);
+    _pendingWeather = wx;
+    showWeatherStrip(wx);
+  } catch {
+    strip.classList.add('hidden');
+  }
+}
 
 // ── Log form ──────────────────────────────────────────────────────────────────
 
@@ -1114,6 +1283,7 @@ const indicator = document.getElementById('hrv-indicator');
 dateInput.value = todayStr();
 updateDateDisplay();
 updateDateQuickBtns();
+updateWeatherStrip(dateInput.value);
 
 document.querySelectorAll('.date-quick-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1123,6 +1293,7 @@ document.querySelectorAll('.date-quick-btn').forEach(btn => {
     updateDateDisplay();
     updateDateQuickBtns();
     clearStravaCards();
+    updateWeatherStrip(dateInput.value);
   });
 });
 
@@ -1130,6 +1301,7 @@ dateInput.addEventListener('change', () => {
   updateDateDisplay();
   updateDateQuickBtns();
   clearStravaCards();
+  updateWeatherStrip(dateInput.value);
 });
 
 function updateDateDisplay() {
@@ -1220,6 +1392,7 @@ form.addEventListener('submit', e => {
     respRate:     optFloat('resp-rate'),
     spo2:         optFloat('spo2'),
     bodyBattery:  optInt('body-battery'),
+    weather:      _pendingWeather ?? null,
     ...(pendingStravaActivities.length && {
       stravaActivities: pendingStravaActivities.map(a => ({
         name:      a.name,
@@ -1280,6 +1453,8 @@ function resetForm() {
   document.querySelectorAll('.flag-btn input').forEach(cb => { cb.checked = false; });
   clearStravaCards();
   document.getElementById('readiness-result')?.classList.add('hidden');
+  _pendingWeather = null;
+  updateWeatherStrip(todayStr());
   document.getElementById('save-btn').textContent = 'Save Entry';
   delete form.dataset.editingId;
 }
@@ -1468,6 +1643,14 @@ function loadEntryIntoForm(entry) {
   });
 
   document.getElementById('notes').value = entry.notes || '';
+
+  // Weather strip — reuse saved data or re-fetch
+  if (entry.weather) {
+    _pendingWeather = entry.weather;
+    showWeatherStrip(entry.weather);
+  } else {
+    updateWeatherStrip(entry.date);
+  }
 
   // Scroll form into view and flag as editing
   document.getElementById('save-btn').textContent = 'Update Entry';
@@ -2766,6 +2949,8 @@ function renderInsightsTab() {
       </div>`
     ).join('');
   }
+
+  renderEnvInsights();
 }
 
 // ── Suppression banner (History tab) ─────────────────────────────────────────
@@ -2832,6 +3017,158 @@ function updateNotifPermissionBtn() {
     btn.disabled = false;
     btn.textContent = 'Enable Notifications';
   }
+}
+
+// ── Weather & Environmental ────────────────────────────────────────────────────
+
+function updateWeatherUI() {
+  const coords    = WeatherService.getCoords();
+  const dot       = document.getElementById('wx-status-dot');
+  const setup     = document.getElementById('wx-setup');
+  const connected = document.getElementById('wx-connected-view');
+  if (!setup || !connected) return;
+
+  if (!coords) {
+    dot?.setAttribute('title', 'No location set');
+    dot?.classList.remove('connected');
+    dot?.classList.add('disconnected');
+    setup.classList.remove('hidden');
+    connected.classList.add('hidden');
+    return;
+  }
+
+  dot?.setAttribute('title', 'Location set');
+  dot?.classList.remove('disconnected');
+  dot?.classList.add('connected');
+  setup.classList.add('hidden');
+  connected.classList.remove('hidden');
+
+  const display = document.getElementById('wx-coords-display');
+  if (display) {
+    const latDir = coords.lat >= 0 ? 'N' : 'S';
+    const lonDir = coords.lon >= 0 ? 'E' : 'W';
+    display.textContent =
+      `📍 ${Math.abs(coords.lat).toFixed(2)}° ${latDir}, ${Math.abs(coords.lon).toFixed(2)}° ${lonDir}`;
+  }
+
+  const elevDisplay = document.getElementById('wx-elevation-display');
+  if (elevDisplay) {
+    const cached = localStorage.getItem(WeatherService.ELEV_KEY);
+    if (cached !== null) {
+      const m = Math.round(+cached);
+      elevDisplay.textContent = `Elevation: ${m} m${m > 1500 ? ' · altitude may affect HRV' : ''}`;
+    } else {
+      WeatherService.fetchElevation(coords.lat, coords.lon)
+        .then(elev => {
+          if (elev != null) {
+            const m = Math.round(elev);
+            elevDisplay.textContent = `Elevation: ${m} m${m > 1500 ? ' · altitude may affect HRV' : ''}`;
+          }
+        }).catch(() => {});
+    }
+  }
+}
+
+function renderEnvInsights() {
+  const el = document.getElementById('env-insights');
+  if (!el) return;
+
+  const allEntries = loadEntries();
+  const wxEntries  = allEntries.filter(e => e.weather && e.hrv > 0);
+
+  if (wxEntries.length < 7) {
+    const have   = wxEntries.length;
+    const needed = 7 - have;
+    el.innerHTML = `<div class="env-empty">
+      <p>Weather data is attached to each entry once location is set in the Connect tab.</p>
+      ${have > 0
+        ? `<p class="footnote">${have} day${have !== 1 ? 's' : ''} collected — ${needed} more to unlock correlations.</p>`
+        : `<p class="footnote">Enable location in Connect → Weather to start collecting data.</p>`}
+    </div>`;
+    return;
+  }
+
+  const baseline = wxEntries.reduce((s, e) => s + e.hrv, 0) / wxEntries.length;
+
+  const tempBins = [
+    { label: '< 5°C',    emoji: '🥶', min: -Infinity, max: 5   },
+    { label: '5 – 15°C', emoji: '🌤', min: 5,         max: 15  },
+    { label: '15 – 25°C',emoji: '☀️', min: 15,        max: 25  },
+    { label: '25 – 32°C',emoji: '🌡️', min: 25,        max: 32  },
+    { label: '> 32°C',   emoji: '🔥', min: 32,        max: Infinity },
+  ];
+
+  const humBins = [
+    { label: '< 40%',    emoji: '🏜️', min: 0,  max: 40  },
+    { label: '40 – 60%', emoji: '👌', min: 40, max: 60  },
+    { label: '60 – 80%', emoji: '💧', min: 60, max: 80  },
+    { label: '> 80%',    emoji: '🌊', min: 80, max: 101 },
+  ];
+
+  const binRows = (bins, getValue) => bins.map(bin => {
+    const m = wxEntries.filter(e => { const v = getValue(e); return v != null && v >= bin.min && v < bin.max; });
+    if (m.length < 2) return null;
+    const avg  = m.reduce((s, e) => s + e.hrv, 0) / m.length;
+    const diff = avg - baseline;
+    return { ...bin, avg: +avg.toFixed(1), diff: +diff.toFixed(1), n: m.length };
+  }).filter(Boolean);
+
+  const tempRows = binRows(tempBins, e => e.weather.tempMaxC);
+  const humRows  = binRows(humBins,  e => e.weather.humidity);
+
+  const rainDays = wxEntries.filter(e => (e.weather.precipMM ?? 0) > 1);
+  const dryDays  = wxEntries.filter(e => (e.weather.precipMM ?? 0) <= 1);
+
+  // Key insight: which temperature range hurts/helps most
+  let banner = '';
+  if (tempRows.length >= 3) {
+    const sorted = [...tempRows].sort((a, b) => a.diff - b.diff);
+    const worst  = sorted[0];
+    if (Math.abs(worst.diff) >= 2) {
+      const dir   = worst.diff < 0 ? 'lower' : 'higher';
+      const color = worst.diff < 0 ? 'var(--red)' : 'var(--green)';
+      banner = `<div class="env-banner">
+        Your HRV averages <strong style="color:${color}">${Math.abs(worst.diff)} ms ${dir}</strong>
+        on ${worst.emoji} ${worst.label} days compared to your mean.
+      </div>`;
+    }
+  }
+
+  const bar = (diff, n) => {
+    const pct   = Math.min(100, Math.abs(diff) * 3);
+    const color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+    const sign  = diff >= 0 ? '+' : '';
+    return `<div class="env-bar-wrap">
+      <div class="env-bar" style="width:${pct}%;background:${color}"></div>
+      <span class="env-diff" style="color:${color}">${sign}${diff} ms</span>
+      <span class="env-n">n=${n}</span>
+    </div>`;
+  };
+
+  const table = (rows, title) => `
+    <div class="env-table-label">${title}</div>
+    <div class="env-table">
+      ${rows.map(r => `
+        <div class="env-row">
+          <span class="env-label">${r.emoji} ${r.label}</span>
+          <span class="env-avg">${r.avg} ms</span>
+          ${bar(r.diff, r.n)}
+        </div>`).join('')}
+    </div>`;
+
+  const precipHtml = (rainDays.length >= 2 && dryDays.length >= 2) ? `
+    ${table([
+      { emoji: '🌧', label: 'Rain days', avg: +(rainDays.reduce((s,e)=>s+e.hrv,0)/rainDays.length).toFixed(1), diff: +((rainDays.reduce((s,e)=>s+e.hrv,0)/rainDays.length) - baseline).toFixed(1), n: rainDays.length },
+      { emoji: '☀️', label: 'Dry days',  avg: +(dryDays.reduce((s,e)=>s+e.hrv,0)/dryDays.length).toFixed(1),  diff: +((dryDays.reduce((s,e)=>s+e.hrv,0)/dryDays.length) - baseline).toFixed(1),  n: dryDays.length  },
+    ], 'Precipitation')}` : '';
+
+  el.innerHTML = `
+    ${banner}
+    <div class="env-subtitle">vs your mean ${baseline.toFixed(1)} ms · ${wxEntries.length} days logged</div>
+    ${tempRows.length >= 2 ? table(tempRows, 'Temperature') : ''}
+    ${humRows.length  >= 2 ? table(humRows,  'Humidity')    : ''}
+    ${precipHtml}
+  `;
 }
 
 // ── Gist Sync UI ─────────────────────────────────────────────────────────────
@@ -2953,10 +3290,59 @@ function refreshAllViews() {
   checkSuppressionBanner();
 }
 
+// ── Weather Connect tab buttons ────────────────────────────────────────────────
+
+document.getElementById('wx-location-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('wx-location-btn');
+  const err = document.getElementById('wx-setup-error');
+  btn.disabled = true;
+  btn.textContent = 'Requesting location…';
+  try {
+    await WeatherService.requestLocation();
+    updateWeatherUI();
+    updateWeatherStrip(dateInput.value);
+    if (err) { err.textContent = ''; err.classList.add('hidden'); }
+  } catch (e) {
+    if (err) { err.textContent = e.message; err.classList.remove('hidden'); }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📍 Use My Location';
+  }
+});
+
+document.getElementById('wx-clear-btn')?.addEventListener('click', () => {
+  WeatherService.clear();
+  updateWeatherUI();
+  updateWeatherStrip(dateInput.value);
+});
+
+document.getElementById('wx-backfill-btn')?.addEventListener('click', async () => {
+  const btn      = document.getElementById('wx-backfill-btn');
+  const progress = document.getElementById('wx-backfill-progress');
+  if (!btn) return;
+  btn.disabled = true;
+  if (progress) { progress.textContent = 'Fetching weather data…'; progress.classList.remove('hidden'); }
+
+  const entries = loadEntries();
+  const count   = await WeatherService.backfill(entries, (done, total) => {
+    if (progress) progress.textContent = `Fetching… ${done} / ${total}`;
+  });
+
+  if (count > 0) saveEntries(entries);
+  btn.disabled = false;
+  if (progress) {
+    progress.textContent = count > 0
+      ? `Done — added weather to ${count} entr${count !== 1 ? 'ies' : 'y'}.`
+      : 'All entries already have weather data.';
+    setTimeout(() => progress.classList.add('hidden'), 5000);
+  }
+});
+
 updateStravaUI();
 updateSyncStatus();
 updateTrainingContext();
 updateGistUI();
+updateWeatherUI();
 checkSuppressionBanner();
 
 const savedNotifTime = localStorage.getItem('notif_time');

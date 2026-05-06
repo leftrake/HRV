@@ -48,6 +48,7 @@
             <input type="date" id="entry-date" required />
           </div>
           <div class="date-display" id="date-display"></div>
+          <div id="weather-strip" class="weather-strip hidden"></div>
         </div>
 
         <!-- ── Morning Report ──────────────────────────────── -->
@@ -324,6 +325,8 @@
         <div class="chart-wrap"><canvas id="race-correlation-chart"></canvas></div>
         <div id="pre-race-strips"></div>
       </div>
+      <div class="section-label">Environmental</div>
+      <div id="env-insights"></div>
     </section>
 
     <!-- CONNECT TAB -->
@@ -478,6 +481,34 @@
         </div>
 
         <div id="gist-msg" class="import-msg hidden"></div>
+      </div>
+
+      <!-- Weather & Location -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#1a6b9a">🌤</div>
+          <div class="provider-info">
+            <h2>Weather &amp; Location</h2>
+            <p class="provider-desc">Attach daily weather to each entry and see how temperature, humidity, and altitude affect your HRV</p>
+          </div>
+          <span id="wx-status-dot" class="status-dot disconnected" title="No location set"></span>
+        </div>
+
+        <div id="wx-setup">
+          <p class="help-text">Grant location access once. Coordinates are stored locally and only sent to the free <strong>Open-Meteo</strong> weather API — no account or API key needed.</p>
+          <button type="button" id="wx-location-btn" class="secondary">📍 Use My Location</button>
+          <p id="wx-setup-error" class="footnote hidden" style="color:var(--red);margin-top:6px"></p>
+        </div>
+
+        <div id="wx-connected-view" class="hidden">
+          <p class="connected-msg" id="wx-coords-display"></p>
+          <p class="footnote" id="wx-elevation-display"></p>
+          <div class="sync-row" style="margin-top:10px">
+            <button type="button" id="wx-backfill-btn" class="secondary small">Fetch Weather for Past Entries</button>
+          </div>
+          <div id="wx-backfill-progress" class="import-msg hidden"></div>
+          <button type="button" id="wx-clear-btn" class="secondary small" style="margin-top:8px">Clear Location</button>
+        </div>
       </div>
 
     </section>
@@ -659,6 +690,20 @@
         <div class="glossary-term">Cloud Sync <span class="glossary-abbr">GitHub Gist</span></div>
         <div class="glossary-def">
           Uses a private GitHub Gist as a serverless cloud backup. Your data is encrypted in transit (HTTPS) and stored in your own GitHub account — no third-party servers. Set it up once per device with a GitHub Personal Access Token (gist scope only). Data merges automatically on each save and every 5 minutes.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">Weather &amp; Environmental <span class="glossary-abbr">Open-Meteo API</span></div>
+        <div class="glossary-def">
+          Grant location access once in the Connect tab and the app automatically attaches daily weather conditions (temperature, humidity, precipitation, wind) to each log entry using the free <strong>Open-Meteo</strong> API — no account or key required. The Environmental section in Insights then correlates these conditions against your HRV to reveal personal patterns:
+          <ul class="glossary-list">
+            <li>🌡️ <strong>Heat</strong> — many athletes see HRV drop in high temperatures due to dehydration and cardiovascular strain</li>
+            <li>💧 <strong>Humidity</strong> — high humidity amplifies heat stress; the body works harder to cool itself</li>
+            <li>🌧 <strong>Rain / cold</strong> — some athletes actually recover better in cooler, wetter conditions</li>
+            <li>⛰️ <strong>Altitude</strong> — the elevation at your location is displayed; consistently high elevation (&gt;1500 m) suppresses HRV while the body acclimatises</li>
+          </ul>
+          Use "Fetch Weather for Past Entries" to backfill historical data in bulk.
         </div>
       </div>
 

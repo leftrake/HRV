@@ -1646,3 +1646,90 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
   border-color: var(--border);
   cursor: pointer;
 }
+
+/* ── Weather strip (Log form) ── */
+.weather-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  margin-top: 4px;
+  transition: opacity .2s;
+}
+.weather-strip strong { color: var(--text); }
+.wx-icon { font-size: 1rem; line-height: 1; }
+.wx-loading { opacity: .5; font-style: italic; }
+
+/* ── Environmental Insights ── */
+.env-empty {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  padding: 8px 0 16px;
+  line-height: 1.65;
+}
+
+.env-banner {
+  background: linear-gradient(135deg, rgba(91,141,238,.1), rgba(52,211,153,.08));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.env-subtitle {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+.env-table-label {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-dim);
+  margin: 16px 0 8px;
+}
+
+.env-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.env-row {
+  display: grid;
+  grid-template-columns: 110px 56px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-xs);
+}
+
+.env-label { color: var(--text-muted); }
+.env-avg   { color: var(--text); font-weight: 600; text-align: right; }
+
+.env-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.env-bar {
+  height: 6px;
+  border-radius: 3px;
+  min-width: 2px;
+  flex-shrink: 0;
+  transition: width .3s ease;
+}
+
+.env-diff { font-weight: 700; font-size: 11px; white-space: nowrap; }
+.env-n    { color: var(--text-dim); font-size: 10px; white-space: nowrap; }
