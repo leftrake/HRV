@@ -615,6 +615,243 @@ const WeatherService = {
   },
 };
 
+// ── Narrative Engine ──────────────────────────────────────────────────────────
+// Uses Claude (Anthropic API) to generate a plain-language monthly fitness
+// summary from stored HRV + training data. No backend required — calls the
+// API directly from the browser using the user's own API key.
+
+const NarrativeEngine = {
+  KEY:     'hrv_narratives',
+  API_KEY: 'anthropic_key',
+
+  load()     { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch { return []; } },
+  save(arr)  { localStorage.setItem(this.KEY, JSON.stringify(arr.slice(0, 24))); },
+  getApiKey(){ return localStorage.getItem(this.API_KEY) || ''; },
+  saveApiKey(k){ localStorage.setItem(this.API_KEY, k); },
+  clearApiKey(){ localStorage.removeItem(this.API_KEY); },
+  getForMonth(mk){ return this.load().find(n => n.month === mk) ?? null; },
+
+  prevMonth(mk) {
+    const [y, m] = mk.split('-').map(Number);
+    return m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
+  },
+
+  monthLabel(mk) {
+    const NAMES = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December'];
+    const [y, m] = mk.split('-').map(Number);
+    return `${NAMES[m-1]} ${y}`;
+  },
+
+  daysInMonth(mk) {
+    const [y, m] = mk.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  },
+
+  // Average days to return to HRV baseline after hard sessions in a date range
+  _recovWindow(entries, activities, start, end) {
+    const byDate = Object.fromEntries(entries.map(e => [e.date, e]));
+    const hard   = activities.filter(a =>
+      a.date >= start && a.date <= end && (a.effort || 0) >= RecoveryAnalytics.EFFORT_THRESHOLD
+    );
+    const lags = [];
+    for (const act of hard) {
+      const b = AdaptiveBaseline.compute(entries, act.date);
+      if (!b) continue;
+      for (let lag = 1; lag <= 5; lag++) {
+        const d = new Date(act.date + 'T12:00:00');
+        d.setDate(d.getDate() + lag);
+        const e = byDate[localDateStr(d)];
+        if (e?.hrv && e.hrv >= b.baseline) { lags.push(lag); break; }
+      }
+    }
+    return lags.length >= 3
+      ? +(lags.reduce((s, v) => s + v, 0) / lags.length).toFixed(1)
+      : null;
+  },
+
+  computeStats(mk, entries, activities) {
+    const [y, m]  = mk.split('-').map(Number);
+    const start   = `${mk}-01`;
+    const end     = localDateStr(new Date(y, m, 0));
+    const prevMk  = this.prevMonth(mk);
+    const [py, pm] = prevMk.split('-').map(Number);
+    const pStart  = `${prevMk}-01`;
+    const pEnd    = localDateStr(new Date(py, pm, 0));
+
+    const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+
+    const monthE  = entries.filter(e => e.date >= start && e.date <= end && e.hrv > 0);
+    const prevE   = entries.filter(e => e.date >= pStart && e.date <= pEnd && e.hrv > 0);
+    if (monthE.length < 3) return null;
+
+    const sorted  = monthE.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const hrvs    = monthE.map(e => e.hrv);
+    const allHRVs = entries.map(e => e.hrv).filter(Boolean);
+
+    const avgHRV   = +avg(hrvs).toFixed(1);
+    const maxHRV   = Math.max(...hrvs);
+    const minHRV   = Math.min(...hrvs);
+    const startHRV = sorted[0].hrv;
+    const endHRV   = sorted.at(-1).hrv;
+    const prevAvg  = prevE.length >= 5 ? +avg(prevE.map(e => e.hrv)).toFixed(1) : null;
+    const allAvg   = allHRVs.length ? +avg(allHRVs).toFixed(1) : null;
+
+    const suppressed = monthE.filter(e => {
+      const b = AdaptiveBaseline.compute(entries, e.date);
+      return b && AdaptiveBaseline.isSuppressed(e.hrv, b);
+    }).length;
+
+    const flagCounts = {};
+    monthE.forEach(e => (e.flags||[]).forEach(f => { flagCounts[f] = (flagCounts[f]||0)+1; }));
+
+    const sleepE = monthE.filter(e => e.sleepDuration);
+    const avgSleep    = sleepE.length ? +avg(sleepE.map(e => e.sleepDuration)).toFixed(1) : null;
+    const shortNights = sleepE.filter(e => e.sleepDuration < 6).length;
+    const sqE = monthE.filter(e => e.sleepQuality);
+    const avgSQ = sqE.length ? +avg(sqE.map(e => e.sleepQuality)).toFixed(1) : null;
+
+    const s90 = new Date(start); s90.setDate(s90.getDate() - 90);
+    const series   = TrainingLoad.compute(activities, localDateStr(s90), end);
+    const startLoad = series[start] || { atl: 0, ctl: 0, tsb: 0 };
+    const endLoad   = series[end]   || { atl: 0, ctl: 0, tsb: 0 };
+    const mDates    = Object.keys(series).filter(d => d >= start && d <= end);
+    const peakATL   = mDates.length ? Math.max(...mDates.map(d => series[d].atl)) : 0;
+    const peakDay   = mDates.find(d => series[d].atl === peakATL);
+
+    const monthActs = activities.filter(a => a.date >= start && a.date <= end);
+    const typeCounts = {};
+    monthActs.forEach(a => {
+      const t = a.mappedType || a.type || 'Other';
+      typeCounts[t] = (typeCounts[t]||0) + 1;
+    });
+
+    const wxE = monthE.filter(e => e.weather?.tempMaxC != null);
+    const avgTemp   = wxE.length ? +avg(wxE.map(e => e.weather.tempMaxC)).toFixed(0) : null;
+    const rainyDays = monthE.filter(e => (e.weather?.precipMM ?? 0) > 1).length;
+
+    return {
+      mk, start, end, label: this.monthLabel(mk),
+      daysLogged: monthE.length, daysInMonth: this.daysInMonth(mk),
+      avgHRV, maxHRV, minHRV,
+      maxDay: monthE.find(e => e.hrv === maxHRV)?.date,
+      minDay: monthE.find(e => e.hrv === minHRV)?.date,
+      startHRV, endHRV, prevAvg, allAvg, suppressed, flagCounts,
+      avgSleep, shortNights, avgSQ,
+      startLoad, endLoad, peakATL, peakDay,
+      totalSessions: monthActs.length, typeCounts,
+      races: monthActs.filter(a => a.isRace && a.raceConfirmed).map(r => ({ name: r.name, date: r.date })),
+      recovWindow:     this._recovWindow(entries, activities, start, end),
+      prevRecovWindow: this._recovWindow(entries, activities, pStart, pEnd),
+      avgTemp, rainyDays, wxDays: wxE.length,
+    };
+  },
+
+  buildPrompt(s) {
+    const fd = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '?';
+    const dlt = (a, b) => a != null && b != null
+      ? (a - b >= 0 ? `+${(a-b).toFixed(1)}` : `${(a-b).toFixed(1)}`)
+      : null;
+
+    const lines = [
+      `Month: ${s.label}`,
+      `Days logged: ${s.daysLogged} / ${s.daysInMonth}`,
+      ``,
+      `HRV:`,
+      `  Average: ${s.avgHRV} ms${s.prevAvg ? ` (prior month: ${s.prevAvg} ms, ${dlt(s.avgHRV, s.prevAvg)} ms)` : ''}`,
+      `  Range: ${s.minHRV} ms (${fd(s.minDay)}) – ${s.maxHRV} ms (${fd(s.maxDay)})`,
+      `  Arc: ${s.startHRV} ms at start → ${s.endHRV} ms at end (${s.endHRV > s.startHRV ? 'rising' : s.endHRV < s.startHRV ? 'falling' : 'flat'})`,
+      `  Suppression events: ${s.suppressed} day${s.suppressed !== 1 ? 's' : ''}`,
+      s.allAvg ? `  All-time mean: ${s.allAvg} ms  (this month is ${dlt(s.avgHRV, s.allAvg)} ms)` : null,
+      Object.keys(s.flagCounts).length
+        ? `  Flags: ${Object.entries(s.flagCounts).map(([f,n])=>`${f} ×${n}`).join(', ')}`
+        : null,
+      ``,
+      `Training:`,
+      s.totalSessions > 0
+        ? `  Sessions: ${s.totalSessions}${Object.keys(s.typeCounts).length ? ' ('+Object.entries(s.typeCounts).map(([t,n])=>`${t} ×${n}`).join(', ')+')' : ''}`
+        : `  Sessions: 0 (no activity data logged)`,
+      s.endLoad.ctl > 0 ? `  Fitness (CTL): ${s.startLoad.ctl.toFixed(0)} → ${s.endLoad.ctl.toFixed(0)} (${dlt(s.endLoad.ctl, s.startLoad.ctl)})` : null,
+      s.endLoad.atl > 0 ? `  Fatigue (ATL): started at ${s.startLoad.atl.toFixed(0)}, peaked at ${s.peakATL.toFixed(0)}, ended at ${s.endLoad.atl.toFixed(0)}` : null,
+      (s.startLoad.tsb !== 0 || s.endLoad.tsb !== 0)
+        ? `  Form (TSB): ${s.startLoad.tsb.toFixed(0)} → ${s.endLoad.tsb.toFixed(0)}`
+        : null,
+      s.races.length ? `  Races: ${s.races.map(r=>`${r.name} (${fd(r.date)})`).join(', ')}` : null,
+      ``,
+      `Recovery:`,
+      s.recovWindow != null
+        ? `  Avg days to HRV baseline after hard sessions: ${s.recovWindow}${s.prevRecovWindow != null ? ` (prior month: ${s.prevRecovWindow} — ${s.recovWindow < s.prevRecovWindow ? 'improving ↑' : s.recovWindow > s.prevRecovWindow ? 'slower ↓' : 'unchanged'})` : ''}`
+        : `  Insufficient hard-session data`,
+      ``,
+      `Sleep:`,
+      s.avgSleep != null ? `  Average: ${s.avgSleep}h / night` : `  No sleep data logged`,
+      s.avgSQ != null ? `  Quality: ${s.avgSQ}/5` : null,
+      s.shortNights > 0 ? `  Short nights (<6h): ${s.shortNights}` : null,
+    ];
+
+    if (s.wxDays >= 5) {
+      lines.push(``, `Weather:`, `  Avg max temperature: ${s.avgTemp}°C, rainy days: ${s.rainyDays}`);
+    }
+
+    return lines.filter(l => l !== null).join('\n');
+  },
+
+  async generate(mk, apiKey, entries, activities) {
+    const stats = this.computeStats(mk, entries, activities);
+    if (!stats) throw new Error('Not enough data — log at least 3 days in this month.');
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:  'POST',
+      headers: {
+        'x-api-key':                               apiKey,
+        'anthropic-version':                       '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type':                            'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: `You are an experienced endurance performance coach writing a monthly fitness narrative for an athlete. Based on their HRV and training data, write 2–3 flowing paragraphs (150–220 words). Be specific with numbers. Sound like a real coach speaking directly to the athlete — honest, analytical, encouraging. Cover what changed and why it matters, any patterns worth noting, and one concrete priority for next month. No bullet points, no headers, no markdown.`,
+        messages: [{ role: 'user', content: this.buildPrompt(stats) }],
+      }),
+    });
+
+    if (res.status === 401) throw new Error('Invalid API key — check your Anthropic key in Connect → AI Narratives.');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${res.status}`);
+    }
+    const j    = await res.json();
+    const text = j.content?.[0]?.text?.trim() || '';
+    if (!text) throw new Error('Empty response from API.');
+
+    const narrative = {
+      month: mk, label: stats.label, text,
+      generatedAt: Date.now(),
+      stats: {
+        daysLogged: stats.daysLogged, avgHRV: stats.avgHRV, prevAvg: stats.prevAvg,
+        suppressed: stats.suppressed, totalSessions: stats.totalSessions,
+        recovWindow: stats.recovWindow,
+      },
+    };
+    this.save([narrative, ...this.load().filter(n => n.month !== mk)]);
+    return narrative;
+  },
+
+  // On app load: silently generate last completed month if API key is set and narrative is missing
+  async autoGenerate(entries, activities) {
+    const key = this.getApiKey();
+    if (!key) return;
+    const now  = new Date();
+    const prev = this.prevMonth(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+    if (this.getForMonth(prev)) return;
+    const [py, pm] = prev.split('-').map(Number);
+    const pStart = `${prev}-01`, pEnd = localDateStr(new Date(py, pm, 0));
+    if (entries.filter(e => e.date >= pStart && e.date <= pEnd).length < 3) return;
+    try { await this.generate(prev, key, entries, activities); } catch {}
+  },
+};
+
 // ── Recovery analytics ────────────────────────────────────────────────────────
 
 const RecoveryAnalytics = {
@@ -1223,7 +1460,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     if (btn.dataset.tab === 'history')  { renderHistory(); checkSuppressionBanner(); }
     if (btn.dataset.tab === 'trends')   renderTrends();
-    if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); }
+    if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); updateAIUI(); }
     if (btn.dataset.tab === 'insights') renderInsightsTab();
   });
 });
@@ -2951,6 +3188,7 @@ function renderInsightsTab() {
   }
 
   renderEnvInsights();
+  renderNarratives();
 }
 
 // ── Suppression banner (History tab) ─────────────────────────────────────────
@@ -3171,6 +3409,105 @@ function renderEnvInsights() {
   `;
 }
 
+// ── AI Narrative UI ───────────────────────────────────────────────────────────
+
+function updateAIUI() {
+  const hasKey    = !!NarrativeEngine.getApiKey();
+  const dot       = document.getElementById('ai-status-dot');
+  const setup     = document.getElementById('ai-setup');
+  const connected = document.getElementById('ai-connected-view');
+  if (!setup || !connected) return;
+
+  if (hasKey) {
+    dot?.classList.replace('disconnected', 'connected');
+    dot?.setAttribute('title', 'API key saved');
+    setup.classList.add('hidden');
+    connected.classList.remove('hidden');
+  } else {
+    dot?.classList.replace('connected', 'disconnected');
+    dot?.setAttribute('title', 'No API key');
+    setup.classList.remove('hidden');
+    connected.classList.add('hidden');
+  }
+}
+
+async function runNarrativeGeneration(mk, triggerEl, statusEl) {
+  const apiKey = NarrativeEngine.getApiKey();
+  if (!apiKey) { alert('Add your Anthropic API key in Connect → AI Narratives first.'); return; }
+  const orig = triggerEl.textContent;
+  triggerEl.disabled = true;
+  triggerEl.textContent = '…generating';
+  if (statusEl) { statusEl.textContent = 'Calling Claude…'; statusEl.className = 'import-msg'; }
+  try {
+    await NarrativeEngine.generate(mk, apiKey, loadEntries(), loadActivities());
+    renderNarratives();
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = e.message; statusEl.className = 'import-msg error'; }
+    triggerEl.disabled = false;
+    triggerEl.textContent = orig;
+  }
+}
+
+function renderNarratives() {
+  const el = document.getElementById('narrative-list');
+  if (!el) return;
+
+  const apiKey     = NarrativeEngine.getApiKey();
+  const narratives = NarrativeEngine.load();
+
+  if (!apiKey) {
+    el.innerHTML = `<div class="narrative-empty">
+      <p>Add your Anthropic API key in <strong>Connect → AI Narratives</strong> to unlock monthly plain-language summaries — written by Claude from your actual data.</p>
+      <p class="footnote" style="margin-top:6px">Each narrative costs ~$0.0001 (Haiku model). Generates automatically when a new month closes.</p>
+    </div>`;
+    return;
+  }
+
+  const now    = new Date();
+  const curMk  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const curLabel = NarrativeEngine.monthLabel(curMk);
+  const hasCurrent = !!NarrativeEngine.getForMonth(curMk);
+
+  const genBar = !hasCurrent ? `
+    <div class="narrative-gen-bar">
+      <button type="button" id="gen-current-btn" class="secondary small">Generate ${curLabel} now</button>
+      <div id="gen-current-msg" class="import-msg hidden"></div>
+    </div>` : '';
+
+  if (!narratives.length) {
+    el.innerHTML = genBar + `<div class="narrative-empty" style="margin-top:${hasCurrent ? 0 : 12}px">No narratives yet — generate your first one above.</div>`;
+  } else {
+    el.innerHTML = genBar + narratives.map(n => {
+      const delta = n.stats.prevAvg != null
+        ? `${(n.stats.avgHRV - n.stats.prevAvg) >= 0 ? '+' : ''}${(n.stats.avgHRV - n.stats.prevAvg).toFixed(1)} ms`
+        : '';
+      return `<div class="narrative-card">
+        <div class="narrative-header">
+          <span class="narrative-month">${n.label}</span>
+          <span class="narrative-meta">${n.stats.daysLogged} days · ${n.stats.avgHRV} ms${delta ? ' · ' + delta : ''}</span>
+          <button class="narrative-regen" data-month="${n.month}" title="Regenerate">↺</button>
+        </div>
+        <div class="narrative-text">${n.text}</div>
+        <div class="narrative-footer">Generated ${new Date(n.generatedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}</div>
+      </div>`;
+    }).join('');
+  }
+
+  const genBtn = document.getElementById('gen-current-btn');
+  if (genBtn) {
+    genBtn.addEventListener('click', () =>
+      runNarrativeGeneration(curMk, genBtn, document.getElementById('gen-current-msg'))
+    );
+  }
+
+  el.querySelectorAll('.narrative-regen').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const msgEl = btn.closest('.narrative-card').querySelector('.narrative-footer');
+      runNarrativeGeneration(btn.dataset.month, btn, null);
+    });
+  });
+}
+
 // ── Gist Sync UI ─────────────────────────────────────────────────────────────
 
 function fmtSyncTime(ts) {
@@ -3338,11 +3675,33 @@ document.getElementById('wx-backfill-btn')?.addEventListener('click', async () =
   }
 });
 
+// ── AI Narrative Connect tab buttons ──────────────────────────────────────────
+
+document.getElementById('ai-connect-btn')?.addEventListener('click', () => {
+  const keyEl = document.getElementById('anthropic-key');
+  const key   = keyEl?.value.trim();
+  if (!key || !key.startsWith('sk-')) {
+    alert('Paste a valid Anthropic API key (starts with "sk-ant-" or "sk-").');
+    return;
+  }
+  NarrativeEngine.saveApiKey(key);
+  if (keyEl) keyEl.value = '';
+  updateAIUI();
+  // Auto-generate previous month if data exists
+  NarrativeEngine.autoGenerate(loadEntries(), loadActivities());
+});
+
+document.getElementById('ai-disconnect-btn')?.addEventListener('click', () => {
+  NarrativeEngine.clearApiKey();
+  updateAIUI();
+});
+
 updateStravaUI();
 updateSyncStatus();
 updateTrainingContext();
 updateGistUI();
 updateWeatherUI();
+updateAIUI();
 checkSuppressionBanner();
 
 const savedNotifTime = localStorage.getItem('notif_time');
@@ -3358,6 +3717,7 @@ StravaSync.autoSync().then(() => {
   StravaSync.processRaceQueue();
 });
 GistSync.autoSync();
+NarrativeEngine.autoGenerate(loadEntries(), loadActivities());
 
 // ── iOS PWA keyboard fix ─────────────────────────────────────────────────────
 // In standalone (home-screen) mode iOS doesn't show the keyboard on tap unless

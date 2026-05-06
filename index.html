@@ -327,6 +327,8 @@
       </div>
       <div class="section-label">Environmental</div>
       <div id="env-insights"></div>
+      <div class="section-label">Monthly Narrative</div>
+      <div id="narrative-list"></div>
     </section>
 
     <!-- CONNECT TAB -->
@@ -481,6 +483,37 @@
         </div>
 
         <div id="gist-msg" class="import-msg hidden"></div>
+      </div>
+
+      <!-- AI Narratives -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:linear-gradient(135deg,#7c3aed,#4f46e5)">✦</div>
+          <div class="provider-info">
+            <h2>AI Narratives</h2>
+            <p class="provider-desc">Monthly plain-language fitness summaries written by Claude from your actual data</p>
+          </div>
+          <span id="ai-status-dot" class="status-dot disconnected" title="No API key"></span>
+        </div>
+
+        <div id="ai-setup">
+          <ol class="setup-steps">
+            <li>Go to <strong>console.anthropic.com</strong> → API Keys</li>
+            <li>Create a new key and copy it</li>
+            <li>Paste it below — stored only in this browser</li>
+          </ol>
+          <div class="form-group">
+            <label>Anthropic API Key</label>
+            <input type="password" id="anthropic-key" placeholder="sk-ant-••••••••••" autocomplete="off" />
+          </div>
+          <button type="button" id="ai-connect-btn">Save Key &amp; Enable</button>
+          <p class="footnote" style="margin-top:8px">Your key is stored only in this browser and is only ever sent to api.anthropic.com. Each narrative uses ~300 tokens (≈$0.0001 with Haiku).</p>
+        </div>
+
+        <div id="ai-connected-view" class="hidden">
+          <p class="connected-msg">✓ API key saved — narratives generate automatically when each month closes</p>
+          <button type="button" id="ai-disconnect-btn" class="secondary small" style="margin-top:8px">Remove Key</button>
+        </div>
       </div>
 
       <!-- Weather & Location -->
@@ -690,6 +723,14 @@
         <div class="glossary-term">Cloud Sync <span class="glossary-abbr">GitHub Gist</span></div>
         <div class="glossary-def">
           Uses a private GitHub Gist as a serverless cloud backup. Your data is encrypted in transit (HTTPS) and stored in your own GitHub account — no third-party servers. Set it up once per device with a GitHub Personal Access Token (gist scope only). Data merges automatically on each save and every 5 minutes.
+        </div>
+      </div>
+
+      <div class="glossary-card">
+        <div class="glossary-term">AI Narratives <span class="glossary-abbr">Claude · Anthropic API</span></div>
+        <div class="glossary-def">
+          Each month, the app feeds your HRV data, training load, recovery windows, sleep, races, and weather to Claude (Haiku model) and stores the generated plain-language narrative. The result sounds like a coach, not a stat sheet — it interprets what changed, why it matters, and what to focus on next. Narratives generate automatically when a new month closes (if your API key is set) and can be regenerated on demand. Requires a free Anthropic account; each narrative costs roughly $0.0001.
+          <div class="glossary-tip">📊 Data included in each prompt: monthly HRV arc, suppression count, flags, CTL/ATL/TSB arc, recovery window vs prior month, sleep, races, and weather context.</div>
         </div>
       </div>
 

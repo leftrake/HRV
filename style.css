@@ -1733,3 +1733,75 @@ button.small { padding: 7px 14px; font-size: var(--fs-sm); }
 
 .env-diff { font-weight: 700; font-size: 11px; white-space: nowrap; }
 .env-n    { color: var(--text-dim); font-size: 10px; white-space: nowrap; }
+
+/* ── Monthly Narrative ── */
+.narrative-gen-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.narrative-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.narrative-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.narrative-month {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.narrative-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.narrative-regen {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  padding: 2px 8px;
+  transition: color .15s, border-color .15s;
+}
+.narrative-regen:hover { color: var(--text); border-color: var(--accent); }
+
+.narrative-text {
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.narrative-text strong { color: var(--text); }
+
+.narrative-footer {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.narrative-empty {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.65;
+  padding: 6px 0 16px;
+}
