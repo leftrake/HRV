@@ -92,7 +92,25 @@ header h1 {
   margin-bottom: 14px;
 }
 
-nav { display: flex; gap: 2px; }
+nav { display: flex; gap: 2px; align-items: flex-end; }
+nav .tab-btn-glossary {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+nav .tab-btn-glossary:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+nav .tab-btn-glossary.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+nav .tab-btn-glossary.active::after { display: none; }
 
 .tab-btn {
   background: none;
