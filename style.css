@@ -155,6 +155,68 @@ main { max-width: 640px; margin: 0 auto; padding: 24px 16px 72px; }
 .tab.active { display: block; animation: tabSlideIn .2s ease; }
 @keyframes tabSlideIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
 
+/* ── Today's Session Card ── */
+.tsc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.tsc-recovery { border-left-color: var(--green); }
+.tsc-modified  { border-left-color: var(--yellow); }
+.tsc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.tsc-dot    { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.tsc-type   { font-weight: 700; font-size: var(--fs-sm); color: var(--text); flex: 1; }
+.tsc-phase  { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.tsc-desc   { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; }
+.tsc-tag    { font-size: .65rem; padding: 2px 7px; border-radius: 10px; background: var(--surface2); color: var(--text-muted); white-space: nowrap; }
+.tsc-tag-full { background: rgba(52,211,153,.15); color: var(--green); }
+.tsc-tag-mod  { background: rgba(251,191,36,.15);  color: var(--yellow); }
+.tsc-tag-rec  { background: rgba(248,113,113,.15); color: var(--red); }
+
+/* ── Training Plan ── */
+.plan-setup { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.plan-setup-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.plan-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 120px; }
+.plan-field label { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+
+.plan-overview {
+  display: flex; gap: 0; margin-bottom: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.plan-ov-stat { flex: 1; padding: 12px 10px; text-align: center; border-right: 1px solid var(--border); }
+.plan-ov-stat:last-child { border-right: none; }
+.plan-ov-val  { font-size: var(--fs-xl); font-weight: 800; line-height: 1; }
+.plan-ov-lbl  { font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 3px; }
+
+.plan-phase-bar { display: flex; border-radius: 6px; overflow: hidden; height: 28px; margin-bottom: 14px; gap: 2px; }
+.plan-phase-seg { display: flex; align-items: center; justify-content: center; overflow: hidden; transition: flex .3s; min-width: 0; }
+.plan-phase-seg-label { font-size: .65rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+
+.plan-weeks { display: flex; flex-direction: column; gap: 4px; }
+.plan-week { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.plan-week-current { border-color: var(--accent); background: var(--accent-glow); }
+.plan-week-past { opacity: .45; }
+.plan-week-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.plan-wk-num   { font-size: var(--fs-xs); font-weight: 700; color: var(--text-muted); min-width: 32px; }
+.plan-wk-phase { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; flex: 1; }
+.plan-wk-ctl   { font-size: var(--fs-xs); color: var(--text-dim); }
+
+.plan-pills { display: flex; gap: 4px; }
+.plan-pill {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 2px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface2); cursor: default;
+  border-top: 2px solid var(--pill, var(--border));
+}
+.plan-pill-today { border-color: var(--accent); background: var(--accent-glow); box-shadow: 0 0 0 1px var(--accent); }
+.plan-pill-past  { opacity: .4; }
+.plan-pill-dow   { font-size: .6rem; color: var(--text-dim); text-transform: uppercase; }
+.plan-pill-type  { font-size: .7rem; font-weight: 700; color: var(--pill, var(--text-muted)); }
+
 /* ── Fitness Today Card ── */
 .ftc {
   background: var(--surface);

@@ -489,6 +489,193 @@ const TaperDetector = {
   },
 };
 
+// ── Training Plan Generator ───────────────────────────────────────────────────
+
+const TrainingPlan = {
+  KEY: 'hrv_plan',
+
+  PHASES: {
+    base:  { label: 'Base',  color: '#3b82f6', desc: 'Aerobic foundation' },
+    build: { label: 'Build', color: '#f59e0b', desc: 'Volume & intensity' },
+    peak:  { label: 'Peak',  color: '#ef4444', desc: 'Race-specific sharpness' },
+    taper: { label: 'Taper', color: '#34d399', desc: 'Freshen & sharpen' },
+  },
+
+  SESSION: {
+    rest:      { label: 'Rest',      color: '#525d78', effortPct: 0.00 },
+    easy:      { label: 'Easy',      color: '#34d399', effortPct: 0.10 },
+    medium:    { label: 'Aerobic',   color: '#60a5fa', effortPct: 0.15 },
+    long:      { label: 'Long',      color: '#a78bfa', effortPct: 0.20 },
+    tempo:     { label: 'Tempo',     color: '#f59e0b', effortPct: 0.22 },
+    intervals: { label: 'Intervals', color: '#f87171', effortPct: 0.25 },
+  },
+
+  // Mon–Sun day patterns per phase
+  PATTERNS: {
+    base:  ['easy', 'medium',    'easy', 'long',   'easy', 'rest',  'easy'],
+    build: ['easy', 'intervals', 'easy', 'tempo',  'rest', 'long',  'easy'],
+    peak:  ['easy', 'intervals', 'easy', 'tempo',  'rest', 'intervals', 'long'],
+    taper: ['easy', 'tempo',     'easy', 'easy',   'rest', 'easy',  'rest'],
+  },
+
+  DESCS: {
+    run: {
+      rest:      'Full rest or gentle walk',
+      easy:      'Easy aerobic run — conversational pace, RPE 5',
+      medium:    { base: 'Steady run + 4×20 s strides', build: 'Aerobic run with 3×10 min at marathon pace', default: 'Aerobic run' },
+      long:      { base: 'Long easy run — 75–90 min', build: 'Long run — 80–100 min, last 20 at tempo', peak: 'Long run — 70–80 min at easy effort', taper: 'Easy long run — 50–60 min', default: 'Long run' },
+      tempo:     { base: '20 min tempo effort (RPE 7)', build: '2×15 min tempo, 3 min rest', peak: '3×10 min at threshold', default: 'Tempo run' },
+      intervals: { build: '6×800 m at 5 k pace, 90 s rest', peak: '5×1000 m at 3 k–5 k pace, 2 min rest', default: '4×400 m at mile pace' },
+    },
+    bike: {
+      rest:      'Full rest or light spinning',
+      easy:      'Easy spin — Z1/Z2, 45–60 min',
+      medium:    { base: 'Aerobic ride + 4×1 min openers', default: 'Aerobic Z2 ride' },
+      long:      { base: 'Long Z2 endurance ride — 2–2.5 hr', taper: 'Easy endurance spin — 90 min', default: 'Long endurance ride' },
+      tempo:     { build: '2×20 min sweet spot (88–93% FTP)', peak: '3×15 min at threshold', default: 'Threshold ride' },
+      intervals: { build: '5×5 min VO2max (106–120% FTP), 5 min rest', peak: '8×3 min VO2max, 3 min rest', default: 'VO2max intervals' },
+    },
+    swim: {
+      rest:      'Full rest or active recovery',
+      easy:      'Easy aerobic swim — 1,500–2,000 m, technique focus',
+      medium:    { default: 'Aerobic set — 2,000–2,500 m at cruise pace' },
+      long:      { default: 'Endurance set — 3,000–4,000 m, negative split' },
+      tempo:     { default: '5×400 m at CSS pace' },
+      intervals: { default: '10×100 m at race pace, 20 s rest' },
+    },
+  },
+
+  _desc(type, phase, sport) {
+    const src = (this.DESCS[sport] || this.DESCS.run)[type];
+    if (!src) return `${type} session`;
+    if (typeof src === 'string') return src;
+    return src[phase] || src.default || `${type} session`;
+  },
+
+  _allocatePhases(totalWeeks) {
+    const taper = Math.max(1, Math.round(totalWeeks * 0.12));
+    const peak  = Math.max(1, Math.round(totalWeeks * 0.13));
+    const build = Math.max(2, Math.round(totalWeeks * 0.45));
+    const base  = Math.max(2, totalWeeks - build - peak - taper);
+    return { base, build, peak, taper };
+  },
+
+  _phaseAt(weekIdx, alloc) {
+    if (weekIdx < alloc.base)                        return 'base';
+    if (weekIdx < alloc.base + alloc.build)          return 'build';
+    if (weekIdx < alloc.base + alloc.build + alloc.peak) return 'peak';
+    return 'taper';
+  },
+
+  _targetCTL(weekIdx, startCTL, peakCTL, alloc) {
+    const rampEnd = alloc.base + alloc.build;
+    const peakEnd = rampEnd + alloc.peak;
+    if (weekIdx <= rampEnd) return startCTL + (peakCTL - startCTL) * (weekIdx / rampEnd);
+    if (weekIdx <= peakEnd) return peakCTL;
+    return peakCTL * (1 - 0.12 * (weekIdx - peakEnd) / alloc.taper);
+  },
+
+  generate(raceDate, sport = 'run', currentCTL = 30) {
+    const today = todayStr();
+    const daysUntil = Math.round(
+      (new Date(raceDate + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000
+    );
+    const totalWeeks = Math.round(daysUntil / 7);
+    if (totalWeeks < 4 || totalWeeks > 26) return null;
+
+    const alloc   = this._allocatePhases(totalWeeks);
+    const baseCTL = Math.max(currentCTL, 20);
+    const peakCTL = Math.min(baseCTL + 6 * (alloc.base + alloc.build), baseCTL * 1.65);
+
+    // Start on the Monday of the current week
+    const startD = new Date(today + 'T12:00:00');
+    const dow = startD.getDay();
+    startD.setDate(startD.getDate() - (dow === 0 ? 6 : dow - 1));
+
+    const weeks = [];
+    for (let w = 0; w < totalWeeks; w++) {
+      const phase     = this._phaseAt(w, alloc);
+      const targetCTL = this._targetCTL(w + 1, baseCTL, peakCTL, alloc);
+      const weeklyEff = targetCTL * 7;
+      const pattern   = this.PATTERNS[phase];
+      const totalPct  = pattern.reduce((s, t) => s + this.SESSION[t].effortPct, 0);
+
+      const days = pattern.map((type, i) => {
+        const d = new Date(startD);
+        d.setDate(d.getDate() + w * 7 + i);
+        const effort = totalPct > 0
+          ? Math.round(weeklyEff * this.SESSION[type].effortPct / totalPct)
+          : 0;
+        return {
+          date:        localDateStr(d),
+          dow:         i,
+          sessionType: type,
+          label:       this.SESSION[type].label,
+          effort,
+          description: this._desc(type, phase, sport),
+          adapted:     null,
+        };
+      });
+
+      weeks.push({ weekNum: w + 1, phase, targetCTL: Math.round(targetCTL), days });
+    }
+
+    return { createdAt: today, raceDate, sport, startCTL: Math.round(baseCTL), peakCTL: Math.round(peakCTL), totalWeeks, alloc, weeks };
+  },
+
+  // Simulate CTL/ATL/TSB forward from today using planned efforts
+  project(plan, activities) {
+    const today  = todayStr();
+    const actual = TrainingLoad.latest(activities);
+    let ctl = actual.ctl, atl = actual.atl;
+    const out = {};
+    for (const week of plan.weeks) {
+      for (const day of week.days) {
+        if (day.date <= today) continue;
+        ctl = ctl + TrainingLoad.K_CTL * (day.effort - ctl);
+        atl = atl + TrainingLoad.K_ATL * (day.effort - atl);
+        out[day.date] = { ctl: +ctl.toFixed(1), atl: +atl.toFixed(1), tsb: +(ctl - atl).toFixed(1) };
+      }
+    }
+    return out;
+  },
+
+  getTodaySession(plan) {
+    if (!plan) return null;
+    const today = todayStr();
+    for (const week of plan.weeks) {
+      const day = week.days.find(d => d.date === today);
+      if (day) return { day, week };
+    }
+    return null;
+  },
+
+  adaptSession(day, readiness, sport) {
+    if (!day || day.sessionType === 'rest') return { ...day, adapted: 'full' };
+    if (readiness >= 70) return { ...day, adapted: 'full' };
+    if (readiness >= 40) {
+      const DOWN = { intervals: 'tempo', tempo: 'medium', long: 'medium', medium: 'easy', easy: 'easy' };
+      const newType = DOWN[day.sessionType] || 'easy';
+      return {
+        ...day, adapted: 'modified', sessionType: newType,
+        label:       this.SESSION[newType].label + ' ↓',
+        description: 'HRV moderate — scaled back one level. Original: ' + day.description,
+        effort:      Math.round(day.effort * 0.65),
+      };
+    }
+    return {
+      ...day, adapted: 'recovery', sessionType: 'easy',
+      label:       'Recovery (auto)',
+      description: 'HRV suppressed — easy recovery or rest today. Reschedule the key session.',
+      effort:      Math.round(day.effort * 0.25),
+    };
+  },
+
+  load()  { try { return JSON.parse(localStorage.getItem(this.KEY) || 'null'); } catch { return null; } },
+  save(p) { localStorage.setItem(this.KEY, JSON.stringify(p)); },
+  clear() { localStorage.removeItem(this.KEY); },
+};
+
 // ── WeatherService ────────────────────────────────────────────────────────────
 // Uses Open-Meteo (free, no key required) for historical + forecast weather.
 
@@ -1450,6 +1637,170 @@ const Notifs = {
   }
 })();
 
+// ── Today's Session Card (Log tab) ───────────────────────────────────────────
+
+function renderTodaySession() {
+  const el = document.getElementById('today-session-card');
+  if (!el) return;
+
+  const plan = TrainingPlan.load();
+  const result = TrainingPlan.getTodaySession(plan);
+  if (!plan || !result) { el.classList.add('hidden'); return; }
+
+  let { day, week } = result;
+  const phaseInfo = TrainingPlan.PHASES[week.phase];
+
+  // Adapt if today is already logged
+  const todayEntry = loadEntries().find(e => e.date === todayStr());
+  if (todayEntry) {
+    const rs = ReadinessScore.compute(todayEntry, loadEntries());
+    day = TrainingPlan.adaptSession(day, rs.score, plan.sport);
+  }
+
+  const sInfo = TrainingPlan.SESSION[day.sessionType] || TrainingPlan.SESSION.easy;
+  const adaptedTag = !todayEntry
+    ? `<span class="tsc-tag">Log HRV to adapt</span>`
+    : day.adapted === 'full'
+    ? `<span class="tsc-tag tsc-tag-full">On plan ✓</span>`
+    : day.adapted === 'modified'
+    ? `<span class="tsc-tag tsc-tag-mod">Modified ↓</span>`
+    : `<span class="tsc-tag tsc-tag-rec">Recovery ↓</span>`;
+
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="tsc-header">
+      <div class="tsc-dot" style="background:${sInfo.color}"></div>
+      <div class="tsc-type">${day.label}</div>
+      ${adaptedTag}
+      <div class="tsc-phase" style="color:${phaseInfo.color}">${phaseInfo.label}</div>
+    </div>
+    <div class="tsc-desc">${day.description}</div>`;
+}
+
+// ── Training Plan Section (Trends tab) ───────────────────────────────────────
+
+function renderPlanSection() {
+  const el = document.getElementById('plan-section');
+  if (!el) return;
+
+  const plan = TrainingPlan.load();
+
+  if (!plan) {
+    const goal = RaceGoal.load();
+    el.innerHTML = `
+      <div class="plan-setup">
+        <div class="plan-setup-row">
+          <div class="plan-field">
+            <label>Race date</label>
+            <input type="date" id="plan-race-date" value="${goal?.date || ''}" />
+          </div>
+          <div class="plan-field">
+            <label>Sport</label>
+            <select id="plan-sport">
+              <option value="run">Run</option>
+              <option value="bike">Bike</option>
+              <option value="swim">Swim</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" id="plan-generate-btn">Generate Plan</button>
+        <p class="footnote" style="margin-top:8px">Builds a periodized Base → Build → Peak → Taper plan from today to your race. Each morning, your HRV readiness score automatically upgrades or downscales the day's session.</p>
+      </div>`;
+
+    document.getElementById('plan-generate-btn')?.addEventListener('click', () => {
+      const raceDate = document.getElementById('plan-race-date')?.value;
+      const sport    = document.getElementById('plan-sport')?.value || 'run';
+      if (!raceDate) { alert('Pick a race date first.'); return; }
+      const currentCTL = TrainingLoad.latest(loadActivities()).ctl || 30;
+      const newPlan = TrainingPlan.generate(raceDate, sport, currentCTL);
+      if (!newPlan) { alert('Race must be 4–26 weeks away to generate a plan.'); return; }
+      TrainingPlan.save(newPlan);
+      renderPlanSection();
+      renderTodaySession();
+      renderLoadChart(+rangeSelect.value);
+    });
+    return;
+  }
+
+  const today      = todayStr();
+  const projection = TrainingPlan.project(plan, loadActivities());
+  const daysLeft   = Math.round((new Date(plan.raceDate + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000);
+  const raceProj   = projection[plan.raceDate];
+
+  // Phase timeline bar
+  const totalW   = plan.totalWeeks;
+  const phaseBar = Object.entries(plan.alloc).map(([phase, wks]) => {
+    const pct   = (wks / totalW * 100).toFixed(1);
+    const info  = TrainingPlan.PHASES[phase];
+    return `<div class="plan-phase-seg" style="width:${pct}%;background:${info.color}" title="${info.label} — ${wks} wk">
+              <span class="plan-phase-seg-label">${info.label}</span>
+            </div>`;
+  }).join('');
+
+  const DOW_LABELS = ['M','T','W','T','F','S','S'];
+
+  const weekRows = plan.weeks.map(week => {
+    const isCurrent = week.days.some(d => d.date === today);
+    const isPast    = week.days.every(d => d.date < today);
+    const info      = TrainingPlan.PHASES[week.phase];
+
+    const pills = week.days.map(day => {
+      const s       = TrainingPlan.SESSION[day.sessionType] || TrainingPlan.SESSION.easy;
+      const isToday = day.date === today;
+      const past    = day.date < today;
+      return `<div class="plan-pill ${isToday ? 'plan-pill-today' : ''} ${past ? 'plan-pill-past' : ''}"
+                   style="--pill:${s.color}"
+                   title="${day.date} · ${day.label}: ${day.description}">
+                <span class="plan-pill-dow">${DOW_LABELS[day.dow]}</span>
+                <span class="plan-pill-type">${day.sessionType === 'rest' ? '·' : day.label[0]}</span>
+              </div>`;
+    }).join('');
+
+    return `<div class="plan-week ${isCurrent ? 'plan-week-current' : ''} ${isPast ? 'plan-week-past' : ''}">
+              <div class="plan-week-hdr">
+                <span class="plan-wk-num">Wk ${week.weekNum}</span>
+                <span class="plan-wk-phase" style="color:${info.color}">${info.label}</span>
+                <span class="plan-wk-ctl">CTL ~${week.targetCTL}</span>
+              </div>
+              <div class="plan-pills">${pills}</div>
+            </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="plan-overview">
+      <div class="plan-ov-stat">
+        <div class="plan-ov-val">${daysLeft > 0 ? daysLeft : '0'}</div>
+        <div class="plan-ov-lbl">Days to race</div>
+      </div>
+      <div class="plan-ov-stat">
+        <div class="plan-ov-val" style="color:var(--accent)">${plan.peakCTL}</div>
+        <div class="plan-ov-lbl">Peak CTL target</div>
+      </div>
+      ${raceProj ? `<div class="plan-ov-stat">
+        <div class="plan-ov-val ${raceProj.tsb > 0 ? 'tc-fresh' : 'tc-fatigued'}">${raceProj.tsb > 0 ? '+' : ''}${raceProj.tsb}</div>
+        <div class="plan-ov-lbl">Projected TSB on race day</div>
+      </div>` : ''}
+      <div class="plan-ov-stat">
+        <div class="plan-ov-val">${plan.totalWeeks}</div>
+        <div class="plan-ov-lbl">Weeks total</div>
+      </div>
+    </div>
+    <div class="plan-phase-bar">${phaseBar}</div>
+    <div class="plan-weeks">${weekRows}</div>
+    <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      <button type="button" id="plan-clear-btn" class="secondary small">Clear Plan</button>
+      <span class="footnote">Built ${plan.createdAt} · ${plan.sport}</span>
+    </div>`;
+
+  document.getElementById('plan-clear-btn')?.addEventListener('click', () => {
+    if (!confirm('Remove this training plan?')) return;
+    TrainingPlan.clear();
+    renderPlanSection();
+    renderTodaySession();
+    renderLoadChart(+rangeSelect.value);
+  });
+}
+
 // ── Fitness Today Card ────────────────────────────────────────────────────────
 
 function renderFitnessCard() {
@@ -1769,6 +2120,7 @@ form.addEventListener('submit', e => {
   showReadinessResult(_readiness);
   Notifs.checkAll(loadEntries(), loadActivities());
   renderFitnessCard();
+  renderTodaySession();
   resetForm();
   delete form.dataset.editingId;
 });
@@ -2171,6 +2523,7 @@ function renderTrends() {
   renderRaceGoal();
   renderLoadChart(days);
   renderInsights();
+  renderPlanSection();
 }
 
 // ── Season Heatmap ────────────────────────────────────────────────────────────
@@ -2788,83 +3141,114 @@ function renderLoadChart(rangeDays = 30) {
   const _s = new Date(); _s.setDate(_s.getDate() - days); const start = localDateStr(_s);
   const series = TrainingLoad.compute(activities, start, end);
 
-  const labels = Object.keys(series);
-  const efforts = labels.map(d => series[d].effort);
-  const atls    = labels.map(d => series[d].atl);
-  const ctls    = labels.map(d => series[d].ctl);
-  const tsbs    = labels.map(d => series[d].tsb);
+  // Build projection overlay if a plan exists
+  const plan = TrainingPlan.load();
+  const projection = plan ? TrainingPlan.project(plan, activities) : {};
+  const projDates  = Object.keys(projection).sort();
+  const capDate    = plan ? plan.raceDate : null;
+  const futureDates = projDates.filter(d => d > end && (!capDate || d <= capDate));
+
+  // Merged date arrays: historical + future
+  const allDates  = [...Object.keys(series), ...futureDates];
+  const efforts   = allDates.map(d => d <= end ? series[d]?.effort ?? 0 : null);
+  const atls      = allDates.map(d => d <= end ? series[d]?.atl   ?? 0 : null);
+  const ctls      = allDates.map(d => d <= end ? series[d]?.ctl   ?? 0 : null);
+  const tsbs      = allDates.map(d => d <= end ? series[d]?.tsb   ?? 0 : null);
+  // Projected CTL starts from today's actual value so lines connect
+  const projCTLs  = allDates.map((d, i) => {
+    if (d < end)  return null;
+    if (d === end) return series[d]?.ctl ?? null;
+    return projection[d]?.ctl ?? null;
+  });
 
   // Bar colors: dominant activity type per day
-  const barColors = labels.map(date => {
+  const barColors = allDates.map(date => {
+    if (date > end) return 'rgba(91,141,238,.25)'; // future — muted
     const acts = activities.filter(a => a.date === date);
     if (!acts.length) return 'rgba(46,51,72,.4)';
     const dominant = acts.reduce((a, b) => (a.effort || 0) >= (b.effort || 0) ? a : b);
     return TYPE_COLOR[dominant.mappedType] || DEFAULT_COLOR;
   });
 
-  // Thin x-axis labels for larger ranges
-  const skipN = labels.length > 60 ? 7 : labels.length > 30 ? 3 : 1;
-  const tickLabels = labels.map((d, i) =>
-    i % skipN === 0
+  // Thin x-axis tick labels; mark race day
+  const skipN = allDates.length > 60 ? 7 : allDates.length > 30 ? 3 : 1;
+  const tickLabels = allDates.map((d, i) => {
+    if (capDate && d === capDate) return '🏁';
+    return i % skipN === 0
       ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      : ''
-  );
+      : '';
+  });
 
   const ctx = document.getElementById('load-chart').getContext('2d');
   if (loadChart) { loadChart.destroy(); loadChart = null; }
 
+  const datasets = [
+    {
+      label: 'Daily Effort',
+      data: efforts,
+      backgroundColor: barColors,
+      borderRadius: 3,
+      order: 3,
+      yAxisID: 'y',
+    },
+    {
+      label: 'ATL – Fatigue',
+      data: atls,
+      type: 'line',
+      borderColor: '#f87171',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.4,
+      fill: false,
+      order: 1,
+      yAxisID: 'y',
+    },
+    {
+      label: 'CTL – Fitness',
+      data: ctls,
+      type: 'line',
+      borderColor: '#5b8dee',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.4,
+      fill: false,
+      order: 1,
+      yAxisID: 'y',
+    },
+    {
+      label: 'TSB – Form',
+      data: tsbs,
+      type: 'line',
+      borderColor: '#34d399',
+      borderWidth: 1.5,
+      borderDash: [4, 3],
+      pointRadius: 0,
+      tension: 0.4,
+      fill: { target: 'origin', above: 'rgba(52,211,153,.08)', below: 'rgba(248,113,113,.08)' },
+      order: 2,
+      yAxisID: 'y2',
+    },
+  ];
+
+  if (futureDates.length) {
+    datasets.push({
+      label: 'CTL – Projected',
+      data: projCTLs,
+      type: 'line',
+      borderColor: '#5b8dee',
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      tension: 0.3,
+      fill: false,
+      order: 1,
+      yAxisID: 'y',
+    });
+  }
+
   loadChart = new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: tickLabels,
-      datasets: [
-        {
-          label: 'Daily Effort',
-          data: efforts,
-          backgroundColor: barColors,
-          borderRadius: 3,
-          order: 3,
-          yAxisID: 'y',
-        },
-        {
-          label: 'ATL – Fatigue',
-          data: atls,
-          type: 'line',
-          borderColor: '#f87171',
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.4,
-          fill: false,
-          order: 1,
-          yAxisID: 'y',
-        },
-        {
-          label: 'CTL – Fitness',
-          data: ctls,
-          type: 'line',
-          borderColor: '#5b8dee',
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.4,
-          fill: false,
-          order: 1,
-          yAxisID: 'y',
-        },
-        {
-          label: 'TSB – Form',
-          data: tsbs,
-          type: 'line',
-          borderColor: '#34d399',
-          borderWidth: 1.5,
-          borderDash: [4, 3],
-          pointRadius: 0,
-          tension: 0.4,
-          fill: { target: 'origin', above: 'rgba(52,211,153,.08)', below: 'rgba(248,113,113,.08)' },
-          order: 2,
-          yAxisID: 'y2',
-        },
-      ],
-    },
+    data: { labels: tickLabels, datasets },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
@@ -2877,9 +3261,13 @@ function renderLoadChart(rangeDays = 30) {
           titleColor: '#e8eaf0',
           bodyColor: '#8891a8',
           callbacks: {
-            title: (items) => labels[items[0].dataIndex],
+            title: (items) => allDates[items[0].dataIndex],
             afterBody: (items) => {
-              const date = labels[items[0].dataIndex];
+              const date = allDates[items[0].dataIndex];
+              if (date > end) {
+                const p = projection[date];
+                return p ? [`  Projected CTL ${p.ctl} · ATL ${p.atl} · TSB ${p.tsb > 0 ? '+' : ''}${p.tsb}`] : [];
+              }
               const acts = activities.filter(a => a.date === date);
               return acts.map(a => `  ${actIcon(a.mappedType)} ${a.name} (${a.effort} pts)`);
             },
@@ -3898,6 +4286,7 @@ updateWeatherUI();
 updateAIUI();
 checkSuppressionBanner();
 renderFitnessCard();
+renderTodaySession();
 
 const savedNotifTime = localStorage.getItem('notif_time');
 if (savedNotifTime) { const el = document.getElementById('notif-time'); if (el) el.value = savedNotifTime; }
