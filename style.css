@@ -81,6 +81,12 @@ header {
   z-index: 100;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
 header h1 {
   background: linear-gradient(135deg, var(--text) 30%, var(--accent));
   -webkit-background-clip: text;
@@ -89,14 +95,12 @@ header h1 {
   font-size: var(--fs-xl);
   font-weight: 800;
   letter-spacing: -.4px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
+  flex: 1;
 }
-
-nav { display: flex; gap: 2px; align-items: flex-end; }
-nav .tab-btn-glossary {
-  margin-left: auto;
-  width: 30px;
-  height: 30px;
+.tab-btn-glossary {
+  width: 26px;
+  height: 26px;
   padding: 0;
   border-radius: 50%;
   font-size: var(--fs-sm);
@@ -104,13 +108,18 @@ nav .tab-btn-glossary {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  margin-bottom: 6px;
+  border: 1px solid var(--border) !important;
   flex-shrink: 0;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
 }
-nav .tab-btn-glossary:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-nav .tab-btn-glossary.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-nav .tab-btn-glossary.active::after { display: none; }
+.tab-btn-glossary:hover { border-color: var(--accent) !important; color: var(--accent); background: var(--accent-glow); }
+.tab-btn-glossary.active { border-color: var(--accent) !important; color: var(--accent); background: var(--accent-glow); }
+.tab-btn-glossary.active::after { display: none !important; }
+
+nav { display: flex; gap: 2px; align-items: flex-end; }
 
 .tab-btn {
   background: none;
