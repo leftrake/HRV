@@ -1465,6 +1465,53 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+// ── Swipe navigation between tabs ────────────────────────────────────────────
+
+(function initSwipeNav() {
+  const TAB_ORDER = ['log', 'history', 'trends', 'insights', 'connect', 'glossary'];
+  const SWIPE_THRESHOLD = 50;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTarget = null;
+
+  function activeTabIndex() {
+    const active = document.querySelector('.tab-btn.active');
+    return active ? TAB_ORDER.indexOf(active.dataset.tab) : 0;
+  }
+
+  function switchToTab(index) {
+    const tab = TAB_ORDER[index];
+    const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.click();
+  }
+
+  function isInsideHorizontalScroller(el) {
+    while (el && el !== document.body) {
+      const style = window.getComputedStyle(el);
+      const overflowX = style.overflowX;
+      if ((overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTarget = e.target;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
+    if (isInsideHorizontalScroller(touchStartTarget)) return;
+    const idx = activeTabIndex();
+    if (dx < 0 && idx < TAB_ORDER.length - 1) switchToTab(idx + 1);
+    if (dx > 0 && idx > 0) switchToTab(idx - 1);
+  }, { passive: true });
+})();
+
 // ── Weather strip (Log form) ──────────────────────────────────────────────────
 
 let _pendingWeather = null;

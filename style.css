@@ -125,7 +125,8 @@ nav { display: flex; gap: 2px; }
 main { max-width: 640px; margin: 0 auto; padding: 24px 16px 72px; }
 
 .tab { display: none; }
-.tab.active { display: block; }
+.tab.active { display: block; animation: tabSlideIn .2s ease; }
+@keyframes tabSlideIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
 
 /* ── Form ── */
 #entry-form { display: flex; flex-direction: column; gap: 22px; }
