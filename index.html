@@ -488,6 +488,34 @@
         <div id="gist-msg" class="import-msg hidden"></div>
       </div>
 
+      <!-- Manual Races -->
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <div class="provider-icon" style="background:#b45309">🏁</div>
+          <div class="provider-info">
+            <h2>Manual Races</h2>
+            <p class="provider-desc">Log track races, cross-country meets, or any race not on Strava so they count toward the race readiness correlation</p>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:4px">
+          <label>Race date</label>
+          <input type="date" id="manual-race-date" />
+        </div>
+        <div class="form-group">
+          <label>Event name</label>
+          <input type="text" id="manual-race-name" placeholder="e.g. 800m — State Champs" />
+        </div>
+        <div class="form-group">
+          <label>Distance <span class="unit">(optional)</span></label>
+          <input type="text" id="manual-race-dist" placeholder="e.g. 800m, 5k, XC 6k" />
+        </div>
+        <button type="button" id="manual-race-add-btn">Add Race</button>
+        <p id="manual-race-msg" class="footnote hidden" style="margin-top:8px"></p>
+
+        <div id="manual-race-list" style="margin-top:14px"></div>
+      </div>
+
       <!-- AI Narratives -->
       <div class="connect-card">
         <div class="connect-card-header">

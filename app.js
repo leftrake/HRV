@@ -1522,7 +1522,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'log')      renderFitnessCard();
     if (btn.dataset.tab === 'history')  { renderHistory(); checkSuppressionBanner(); }
     if (btn.dataset.tab === 'trends')   renderTrends();
-    if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); updateAIUI(); }
+    if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); updateAIUI(); renderManualRaceList(); }
     if (btn.dataset.tab === 'insights') renderInsightsTab();
   });
 });
@@ -3728,6 +3728,90 @@ document.getElementById('gist-disconnect-btn')?.addEventListener('click', () => 
   setGistMsg('');
   updateGistUI();
 });
+
+// ── Manual Races ──────────────────────────────────────────────────────────────
+
+function renderManualRaceList() {
+  const el = document.getElementById('manual-race-list');
+  if (!el) return;
+  const manual = loadActivities().filter(a => a.isRace && a.raceConfirmed && a.manual);
+  if (!manual.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="section-label" style="margin-top:0">Added races</div>` +
+    manual.sort((a,b) => b.date.localeCompare(a.date)).map(a => `
+      <div class="manual-race-row">
+        <div>
+          <div class="manual-race-name">${a.name}</div>
+          <div class="manual-race-date">${a.date}${a.distLabel ? ' · ' + a.distLabel : ''}</div>
+        </div>
+        <button class="manual-race-del secondary small" data-id="${a.id}" aria-label="Remove">✕</button>
+      </div>`).join('');
+
+  el.querySelectorAll('.manual-race-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = +btn.dataset.id;
+      saveActivities(loadActivities().filter(a => a.id !== id));
+      renderManualRaceList();
+    });
+  });
+}
+
+(function initManualRaces() {
+  const dateEl  = document.getElementById('manual-race-date');
+  const nameEl  = document.getElementById('manual-race-name');
+  const distEl  = document.getElementById('manual-race-dist');
+  const addBtn  = document.getElementById('manual-race-add-btn');
+  const msg     = document.getElementById('manual-race-msg');
+  if (!addBtn) return;
+
+  // Default date to today
+  if (dateEl) dateEl.value = todayStr();
+
+  function setMsg(text, isError) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.style.color = isError ? 'var(--red)' : 'var(--green)';
+    msg.classList.remove('hidden');
+    if (!isError) setTimeout(() => msg.classList.add('hidden'), 3000);
+  }
+
+  addBtn.addEventListener('click', () => {
+    const date = dateEl?.value.trim();
+    const name = nameEl?.value.trim();
+    if (!date) { setMsg('Pick a date.', true); return; }
+    if (!name) { setMsg('Enter an event name.', true); return; }
+
+    const activity = {
+      id:           Date.now(),
+      date,
+      name,
+      distLabel:    distEl?.value.trim() || null,
+      mappedType:   'Race',
+      stravaType:   'Race',
+      isRace:       true,
+      raceConfirmed: true,
+      manual:       true,
+      effort:       80,
+      distanceM:    0,
+      durationS:    0,
+      elevationM:   0,
+      avgHR:        null,
+      maxHR:        null,
+      avgPaceSecKm: null,
+      raceDetails:  null,
+    };
+
+    const all = [...loadActivities(), activity].sort((a,b) => b.date.localeCompare(a.date));
+    saveActivities(all);
+    GistSync.pushSilent();
+    renderManualRaceList();
+    if (nameEl) nameEl.value = '';
+    if (distEl) distEl.value = '';
+    if (dateEl) dateEl.value = todayStr();
+    setMsg(`✓ ${name} added.`, false);
+  });
+
+  renderManualRaceList();
+})();
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
