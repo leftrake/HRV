@@ -128,6 +128,39 @@ main { max-width: 640px; margin: 0 auto; padding: 24px 16px 72px; }
 .tab.active { display: block; animation: tabSlideIn .2s ease; }
 @keyframes tabSlideIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
 
+/* ── Fitness Today Card ── */
+.ftc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.ftc-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  flex: 1;
+  gap: 0;
+}
+.ftc-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.ftc-val  { font-size: var(--fs-xl); font-weight: 800; line-height: 1; }
+.ftc-lbl  { font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; text-align: center; }
+.ftc-divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 14px; flex-shrink: 0; }
+.ftc-readiness { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; }
+.ftc-rs-score  { font-size: var(--fs-2xl); font-weight: 800; line-height: 1; }
+.ftc-rs-label  { font-size: var(--fs-xs); font-weight: 700; }
+.ftc-rs-sub    { font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+.ftc-nolog .ftc-rs-sub { font-style: italic; color: var(--text-dim); }
+@media (max-width: 380px) {
+  .ftc-val { font-size: var(--fs-lg); }
+  .ftc-lbl { font-size: .6rem; }
+  .ftc-divider { margin: 0 10px; }
+}
+
 /* ── Form ── */
 #entry-form { display: flex; flex-direction: column; gap: 22px; }
 

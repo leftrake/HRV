@@ -1450,6 +1450,67 @@ const Notifs = {
   }
 })();
 
+// ── Fitness Today Card ────────────────────────────────────────────────────────
+
+function renderFitnessCard() {
+  const el = document.getElementById('fitness-today-card');
+  if (!el) return;
+
+  const entries    = loadEntries();
+  const activities = loadActivities();
+
+  if (!entries.length && !activities.length) { el.classList.add('hidden'); return; }
+
+  const load    = TrainingLoad.latest(activities);
+  const { log } = Streaks.compute(entries);
+
+  const tsbSign  = load.tsb > 0 ? '+' : '';
+  const tsbCls   = load.tsb > 10 ? 'tc-fresh' : load.tsb > -10 ? 'tc-neutral' : 'tc-fatigued';
+  const tsbLabel = load.tsb > 10 ? 'Fresh' : load.tsb > -10 ? 'Neutral' : 'Fatigued';
+
+  // Readiness from today's entry, if logged
+  const todayEntry = entries.find(e => e.date === todayStr());
+  let readinessHTML = '';
+  if (todayEntry) {
+    const rs  = ReadinessScore.compute(todayEntry, entries);
+    const lbl = ReadinessScore.label(rs.score);
+    readinessHTML = `
+      <div class="ftc-divider"></div>
+      <div class="ftc-readiness">
+        <span class="ftc-rs-score" style="color:${lbl.color}">${rs.score}</span>
+        <span class="ftc-rs-label" style="color:${lbl.color}">${lbl.text}</span>
+        <span class="ftc-rs-sub">Readiness</span>
+      </div>`;
+  } else {
+    readinessHTML = `
+      <div class="ftc-divider"></div>
+      <div class="ftc-readiness ftc-nolog">
+        <span class="ftc-rs-sub">Not logged today</span>
+      </div>`;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="ftc-stats">
+      <div class="ftc-stat">
+        <div class="ftc-val" style="color:var(--accent)">${load.ctl > 0 ? load.ctl : '—'}</div>
+        <div class="ftc-lbl">Fitness</div>
+      </div>
+      <div class="ftc-stat">
+        <div class="ftc-val" style="color:var(--red)">${load.atl > 0 ? load.atl : '—'}</div>
+        <div class="ftc-lbl">Fatigue</div>
+      </div>
+      <div class="ftc-stat">
+        <div class="ftc-val ${tsbCls}">${load.ctl > 0 ? tsbSign + load.tsb : '—'}</div>
+        <div class="ftc-lbl">Form · ${load.ctl > 0 ? tsbLabel : '–'}</div>
+      </div>
+      <div class="ftc-stat">
+        <div class="ftc-val" style="color:var(--yellow)">${log || '—'}</div>
+        <div class="ftc-lbl">Day streak</div>
+      </div>
+    </div>${readinessHTML}`;
+}
+
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1458,6 +1519,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'log')      renderFitnessCard();
     if (btn.dataset.tab === 'history')  { renderHistory(); checkSuppressionBanner(); }
     if (btn.dataset.tab === 'trends')   renderTrends();
     if (btn.dataset.tab === 'connect')  { updateStravaUI(); updateWeatherUI(); updateAIUI(); }
@@ -1706,6 +1768,7 @@ form.addEventListener('submit', e => {
   GistSync.pushSilent();
   showReadinessResult(_readiness);
   Notifs.checkAll(loadEntries(), loadActivities());
+  renderFitnessCard();
   resetForm();
   delete form.dataset.editingId;
 });
@@ -3750,6 +3813,7 @@ updateGistUI();
 updateWeatherUI();
 updateAIUI();
 checkSuppressionBanner();
+renderFitnessCard();
 
 const savedNotifTime = localStorage.getItem('notif_time');
 if (savedNotifTime) { const el = document.getElementById('notif-time'); if (el) el.value = savedNotifTime; }
