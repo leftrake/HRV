@@ -1862,6 +1862,103 @@ function renderFitnessCard() {
     </div>${readinessHTML}`;
 }
 
+// ── Zone Distribution ─────────────────────────────────────────────────────────
+
+function renderZoneDistribution() {
+  const el = document.getElementById('zone-dist');
+  if (!el) return;
+
+  const all = loadActivities().filter(a => a.effort > 0 && !a.isRace);
+  if (all.length < 5) {
+    el.innerHTML = '<p class="chart-empty">Connect Strava and sync activities to see your training zone distribution.</p>';
+    return;
+  }
+
+  // 90-day window
+  const cutoff  = localDateStr(new Date(Date.now() - 90 * 86400000));
+  const recent  = all.filter(a => a.date >= cutoff);
+  if (recent.length < 3) {
+    el.innerHTML = '<p class="chart-empty">Not enough recent activities — sync more data or switch to a longer range.</p>';
+    return;
+  }
+
+  function zone(effort) {
+    return effort <= 40 ? 'easy' : effort <= 65 ? 'moderate' : 'hard';
+  }
+
+  function calcZones(acts) {
+    const t = { easy: 0, moderate: 0, hard: 0 };
+    for (const a of acts) {
+      const dur = a.durationS > 0 ? a.durationS : 1800;
+      t[zone(a.effort)] += dur;
+    }
+    const total = t.easy + t.moderate + t.hard;
+    if (!total) return null;
+    const hrs = (total / 3600).toFixed(1);
+    return {
+      easy:     t.easy     / total * 100,
+      moderate: t.moderate / total * 100,
+      hard:     t.hard     / total * 100,
+      hrs, count: acts.length,
+    };
+  }
+
+  const overall = calcZones(recent);
+  if (!overall) { el.innerHTML = ''; return; }
+
+  function bar(z, small = false) {
+    const f = n => Math.round(n) + '%';
+    return `<div class="zd-bar ${small ? 'zd-bar-sm' : ''}">
+      <div class="zd-seg zd-easy" style="width:${z.easy}%"     title="Easy ${f(z.easy)}">${z.easy > 10 ? f(z.easy) : ''}</div>
+      <div class="zd-seg zd-mod"  style="width:${z.moderate}%" title="Moderate ${f(z.moderate)}">${z.moderate > 10 ? f(z.moderate) : ''}</div>
+      <div class="zd-seg zd-hard" style="width:${z.hard}%"     title="Hard ${f(z.hard)}">${z.hard > 8 ? f(z.hard) : ''}</div>
+    </div>`;
+  }
+
+  // Verdict
+  const ep = overall.easy;
+  const [vText, vCls] =
+    ep >= 78 ? ['Well polarized — close to the 80/20 ideal ✓',         'zd-good'] :
+    ep >= 65 ? [`${Math.round(ep)}% easy — nudge more sessions toward aerobic base`, 'zd-warn'] :
+               [`Only ${Math.round(ep)}% easy — risk of accumulated fatigue. Aim for 80%`, 'zd-bad'];
+
+  // Per-sport rows (if more than one sport)
+  const sports = [...new Set(recent.map(a => a.mappedType))].filter(Boolean);
+  const sportHTML = sports.length > 1 ? sports.map(sport => {
+    const z = calcZones(recent.filter(a => a.mappedType === sport));
+    if (!z || z.count < 2) return '';
+    return `<div class="zd-sport-row">
+      <div class="zd-sport-lbl">${actIcon(sport)} ${sport} <span class="zd-meta-sm">${z.count} sessions · ${z.hrs}h</span></div>
+      ${bar(z, true)}
+    </div>`;
+  }).join('') : '';
+
+  el.innerHTML = `
+    <div class="zd-card">
+      <div class="zd-summary">${recent.length} sessions · ${overall.hrs} hours · last 90 days</div>
+
+      <div class="zd-rows">
+        <div class="zd-row-label">Actual</div>
+        ${bar(overall)}
+        <div class="zd-row-label">80/20 target</div>
+        <div class="zd-bar zd-bar-target">
+          <div class="zd-seg zd-easy" style="width:80%">80%</div>
+          <div class="zd-seg zd-hard" style="width:20%">20%</div>
+        </div>
+      </div>
+
+      <div class="zd-legend">
+        <span><span class="zd-swatch zd-easy"></span>Easy ≤40</span>
+        <span><span class="zd-swatch zd-mod"></span>Moderate 41–65</span>
+        <span><span class="zd-swatch zd-hard"></span>Hard 66+</span>
+      </div>
+
+      <div class="zd-verdict ${vCls}">${vText}</div>
+
+      ${sportHTML ? `<div class="zd-sports">${sportHTML}</div>` : ''}
+    </div>`;
+}
+
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -2535,6 +2632,7 @@ function renderTrends() {
   renderRaceGoal();
   renderLoadChart(days);
   renderInsights();
+  renderZoneDistribution();
   renderPlanSection();
 }
 
