@@ -4202,6 +4202,102 @@ function renderManualRaceList() {
   renderManualRaceList();
 })();
 
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+const Onboarding = {
+  KEY: 'hrv_onboarded',
+  isDone()     { return !!localStorage.getItem(this.KEY); },
+  markDone()   { localStorage.setItem(this.KEY, '1'); },
+  shouldShow() { return !this.isDone() && loadEntries().length === 0; },
+
+  SLIDES: [
+    {
+      icon:  '💓',
+      title: 'Welcome to HRV Tracker',
+      body:  'Heart rate variability is the most sensitive daily signal your body gives you about recovery, stress, and readiness to train hard. This app turns that signal into a coaching tool.',
+      cta:   'How does it work?',
+    },
+    {
+      icon:  '🌅',
+      title: 'Log every morning in 60 seconds',
+      body:  'Right after waking — before coffee, before your phone — measure your HRV and log it here. Consistency matters more than precision. Two weeks of data is enough to reveal your personal patterns.',
+      cta:   'What do I need?',
+    },
+    {
+      icon:  '📱',
+      title: 'Works with any HRV app',
+      body:  'Use HRV4Training, Elite HRV, Garmin, Apple Watch, Polar, or any app that shows RMSSD. No device yet? You can still log sleep quality, mood, and training flags — every field helps.',
+      cta:   'What else can it do?',
+    },
+    {
+      icon:  '📊',
+      title: 'The more you log, the smarter it gets',
+      body:  'After a week: your personal baseline. After a month: how each workout type affects your recovery. After a season: race readiness correlation and a training plan that adapts to your HRV every morning.',
+      cta:   "Let's go →",
+      final: true,
+    },
+  ],
+
+  _step: 0,
+
+  show() {
+    this._step = 0;
+    const overlay = document.getElementById('ob-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+    this._render();
+
+    document.getElementById('ob-skip-btn')?.addEventListener('click', () => this.dismiss());
+    document.getElementById('ob-cta-btn')?.addEventListener('click',  () => this._next());
+  },
+
+  _render() {
+    const slide = this.SLIDES[this._step];
+    const body  = document.getElementById('ob-body');
+    const cta   = document.getElementById('ob-cta-btn');
+    const dots  = document.getElementById('ob-dots');
+    if (!body || !cta || !dots) return;
+
+    body.innerHTML = `
+      <div class="ob-icon">${slide.icon}</div>
+      <h2 class="ob-title">${slide.title}</h2>
+      <p class="ob-text">${slide.body}</p>`;
+
+    cta.textContent = slide.cta;
+
+    dots.innerHTML = this.SLIDES.map((_, i) =>
+      `<div class="ob-dot ${i === this._step ? 'ob-dot-active' : ''}"></div>`
+    ).join('');
+
+    // Animate in
+    body.classList.remove('ob-fade');
+    void body.offsetWidth; // reflow
+    body.classList.add('ob-fade');
+  },
+
+  _next() {
+    if (this._step < this.SLIDES.length - 1) {
+      this._step++;
+      this._render();
+    } else {
+      this.dismiss(true);
+    }
+  },
+
+  dismiss(focusForm = false) {
+    this.markDone();
+    const overlay = document.getElementById('ob-overlay');
+    overlay?.classList.add('ob-out');
+    setTimeout(() => overlay?.classList.add('hidden'), 300);
+    if (focusForm) {
+      setTimeout(() => {
+        document.getElementById('hrv')?.focus();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 320);
+    }
+  },
+};
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 function refreshAllViews() {
@@ -4303,6 +4399,8 @@ StravaSync.autoSync().then(() => {
 });
 GistSync.autoSync();
 NarrativeEngine.autoGenerate(loadEntries(), loadActivities());
+
+if (Onboarding.shouldShow()) Onboarding.show();
 
 // ── iOS PWA keyboard fix ─────────────────────────────────────────────────────
 // In standalone (home-screen) mode iOS doesn't show the keyboard on tap unless
