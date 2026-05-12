@@ -1892,14 +1892,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     return active ? TAB_ORDER.indexOf(active.dataset.tab) : 0;
   }
 
-  function switchToTab(index, dir) {
+  function switchToTab(index) {
     const tab = TAB_ORDER[index];
     const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
-    if (!btn) return;
-    document.body.dataset.swipeDir = dir; // 'left' | 'right' — read by CSS
-    btn.click();
-    // Clear after animation completes so button-click transitions use the neutral fade
-    setTimeout(() => delete document.body.dataset.swipeDir, 250);
+    if (btn) btn.click();
   }
 
   function isInsideHorizontalScroller(el) {
@@ -1925,9 +1921,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (isInsideHorizontalScroller(touchStartTarget)) return;
     const idx = activeTabIndex();
     // Swipe left → next tab (content arrives from right)
-    if (dx < 0 && idx < TAB_ORDER.length - 1) switchToTab(idx + 1, 'left');
-    // Swipe right → prev tab (content arrives from left)
-    if (dx > 0 && idx > 0) switchToTab(idx - 1, 'right');
+    if (dx < 0 && idx < TAB_ORDER.length - 1) switchToTab(idx + 1);
+    if (dx > 0 && idx > 0) switchToTab(idx - 1);
   }, { passive: true });
 })();
 

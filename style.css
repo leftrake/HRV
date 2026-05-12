@@ -153,14 +153,7 @@ main { max-width: 640px; margin: 0 auto; padding: 24px 16px 72px; }
 
 .tab { display: none; }
 .tab.active { display: block; animation: tabFadeIn .18s ease; }
-/* Default: plain fade for tap navigation */
 @keyframes tabFadeIn { from { opacity: 0; } to { opacity: 1; } }
-/* Swipe left → next tab arrives from the right */
-[data-swipe-dir="left"] .tab.active  { animation: tabSlideFromRight .2s ease; }
-/* Swipe right → prev tab arrives from the left */
-[data-swipe-dir="right"] .tab.active { animation: tabSlideFromLeft  .2s ease; }
-@keyframes tabSlideFromRight { from { opacity: 0; transform: translateX(30px); }  to { opacity: 1; transform: translateX(0); } }
-@keyframes tabSlideFromLeft  { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
 
 /* ── Today's Session Card ── */
 .tsc {
