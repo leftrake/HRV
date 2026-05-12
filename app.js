@@ -1886,6 +1886,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   let touchStartX = 0;
   let touchStartY = 0;
   let touchStartTarget = null;
+  let lockAxis = null; // 'h' | 'v' | null
 
   function activeTabIndex() {
     const active = document.querySelector('.tab-btn.active');
@@ -1901,8 +1902,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   function isInsideHorizontalScroller(el) {
     while (el && el !== document.body) {
       const style = window.getComputedStyle(el);
-      const overflowX = style.overflowX;
-      if ((overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth) return true;
+      const ox = style.overflowX;
+      if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth) return true;
       el = el.parentElement;
     }
     return false;
@@ -1912,15 +1913,25 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     touchStartTarget = e.target;
+    lockAxis = null;
   }, { passive: true });
+
+  // Non-passive so we can preventDefault and kill horizontal browser scroll
+  document.addEventListener('touchmove', e => {
+    if (isInsideHorizontalScroller(touchStartTarget)) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartX);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY);
+    if (!lockAxis && (dx > 5 || dy > 5)) lockAxis = dx > dy ? 'h' : 'v';
+    if (lockAxis === 'h') e.preventDefault(); // stop the page from sliding
+  }, { passive: false });
 
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - touchStartX;
     const dy = e.changedTouches[0].clientY - touchStartY;
+    lockAxis = null;
     if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
     if (isInsideHorizontalScroller(touchStartTarget)) return;
     const idx = activeTabIndex();
-    // Swipe left → next tab (content arrives from right)
     if (dx < 0 && idx < TAB_ORDER.length - 1) switchToTab(idx + 1);
     if (dx > 0 && idx > 0) switchToTab(idx - 1);
   }, { passive: true });

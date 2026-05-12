@@ -41,6 +41,7 @@ body {
   font-size: 15px;
   line-height: 1.5;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* ── Pull to refresh ── */
